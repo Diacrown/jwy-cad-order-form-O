@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <title>CAD Order Form</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  
+  <style>
+    .excel-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; border: 1px solid #000; color: #000; }
+    .excel-table th, .excel-table td { border: 1px solid #000; padding: 6px 8px; vertical-align: middle; }
+    .excel-table input, .excel-table select { width: 100%; border: none; outline: none; background: transparent; padding: 2px 0; font-family: inherit; color: #000; }
+    .excel-table input:focus, .excel-table select:focus { background-color: #eff6ff; } 
+    #diamondTable td, #diamondTable th { padding: 5px 6px; font-size: 0.78rem; }
+    #diamondTable .d-row:hover { background-color: #f0f7ff; }
+    #diamondTable input.font-mono, #diamondTable .d-tot { font-variant-numeric: tabular-nums; }
+    
+    .bg-blue-hl { background-color: #dbeafe !important; } 
+    .bg-blue-soft { background-color: #eff6ff !important; } 
+    .font-black-strong { color: #000 !important; font-weight: 600; }
+    .remove-btn { color: #dc2626; cursor: pointer; font-weight: bold; background: none; border: none; }
+    .dim-input { width: 3.5rem; text-align: center; border-bottom: 1px solid #94a3b8 !important; margin: 0 2px; }
+    
+    @media print {
+      body { background: white !important; padding: 0 !important; }
+      .print-hidden { display: none !important; }
+      #jobCardWrapper { border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-2 md:p-6 font-sans">
+
+  <div id="loader-overlay" class="hidden fixed inset-0 z-[9999] bg-slate-900/80 flex flex-col items-center justify-center backdrop-blur-sm transition-opacity">
+    <div class="h-12 w-12 border-4 border-blue-300 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+    <p id="loader-text" class="text-white font-semibold tracking-wide">Generating Enterprise PDF & Saving...</p>
+  </div>
+
+  <div id="imageModal" class="fixed inset-0 z-50 hidden bg-slate-900/90 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+    <div class="relative max-w-5xl w-full flex justify-center">
+      <button onclick="closeModal()" class="absolute -top-10 right-0 text-white hover:text-red-400 text-4xl font-bold cursor-pointer transition-colors">&times;</button>
+      <img id="modalImage" class="max-h-[85vh] max-w-full rounded shadow-2xl object-contain border-2 border-slate-700">
+    </div>
+  </div>
+
+  <div id="jobCardWrapper" class="max-w-6xl mx-auto bg-white p-4 md:p-8 rounded shadow-lg border border-slate-300 relative">
+    
+    <header class="flex justify-between items-center mb-6 print-hidden">
+      <h1 class="text-2xl font-extrabold tracking-tight text-slate-900">CAD Order Form</h1>
+      <div class="flex gap-2">
+        <input type="file" id="pdf-upload" class="hidden" accept=".pdf">
+        <button type="button" id="load-pdf-btn" class="bg-blue-50 text-blue-700 font-bold py-2 px-4 rounded border border-blue-200 hover:bg-blue-100 transition-colors">
+          📄 Load PDF Data
+        </button>
+      </div>
+    </header>
+
+    <form id="cadForm">
+      <div id="visual-job-card" class="bg-white" style="border: 2px solid #000;">
+        <table class="excel-table border-0 w-full">
+          <tr>
+            <td class="w-[20%] font-black-strong border-l-0">
+              <span class="block text-[10px] text-slate-500 font-normal">Job No:</span>
+              <input type="text" name="JobNo" required class="font-bold text-sm">
+            </td>
+            <td class="w-[20%] font-black-strong">
+              <span class="block text-[10px] text-slate-500 font-normal">Item No:</span>
+              <input type="text" name="ItemNo" class="font-bold text-sm">
+            </td>
+            <td class="w-[20%] font-black-strong bg-blue-50">
+              <span class="block text-[10px] text-slate-500 font-normal">SKU: *</span>
+              <input type="text" name="Style code" required class="font-bold text-sm">
+            </td>
+            <td class="w-[20%] font-black-strong">
+              <span class="block text-[10px] text-slate-500 font-normal">Request Date:</span>
+              <input type="date" name="Inquiry start date" class="font-bold text-sm">
+            </td>
+            <td class="w-[20%] font-black-strong border-r-0">
+              <span class="block text-[10px] text-slate-500 font-normal">Ship Date:</span>
+              <input type="date" name="Ship Date" class="font-bold text-sm">
+            </td>
+          </tr>
+        </table>
+
+        <div class="flex flex-col md:flex-row border-t border-black">
+          <div class="w-full md:w-2/3 p-4 flex flex-col border-r border-black bg-white min-h-[400px]">
+             <div id="tabs-container" class="flex flex-wrap overflow-x-auto border-b border-blue-400 mb-2 print-hidden"></div>
+             <div id="tab-content-container" class="flex-grow relative border-2 border-dashed border-blue-300 p-2 flex flex-col items-center justify-center group hover:bg-blue-50 transition-colors print-hidden"></div>
+             <img id="pdfImgMain" class="hidden print-block max-h-96 w-full object-contain mx-auto mt-2">
+          </div>
+
+          <div class="w-full md:w-1/3 flex flex-col">
+            <table class="excel-table border-0 w-full h-full flex-grow" style="border:none;">
+              <tr><td class="w-[40%] font-black-strong">Vendor SKU:</td><td class="w-[60%]"><input type="text" name="VendorItemNo"></td></tr>
+              <tr>
+                <td class="font-black-strong bg-blue-hl">Metal 1</td>
+                <td class="bg-blue-hl flex">
+                   <select name="Metal Type 1" id="dd-metalType1" class="w-[38%]"></select>
+                   <span class="px-1 font-bold">/</span>
+                   <select name="Metal Col 1" id="dd-metalColor1" class="w-[38%]"></select>
+                   <select name="Metal Extra 1" id="dd-metalExtra1" class="w-[24%]" title="Nickel Free / Palladium"></select>
+                </td>
+              </tr>
+              <tr><td class="bg-blue-hl font-black-strong">Wt (gms)</td><td class="bg-blue-hl"><input type="number" step="0.01" name="Metal 1 Weight" placeholder="0.00" class="font-mono" onblur="formatDecimal(this,2)"></td></tr>
+              <tr>
+                <td class="font-black-strong bg-blue-hl">Metal 2</td>
+                <td class="bg-blue-hl flex">
+                   <select name="Metal Type 2" id="dd-metalType2" class="w-[38%]"></select>
+                   <span class="px-1 font-bold">/</span>
+                   <select name="Metal Col 2" id="dd-metalColor2" class="w-[38%]"></select>
+                   <select name="Metal Extra 2" id="dd-metalExtra2" class="w-[24%]" title="Nickel Free / Palladium"></select>
+                </td>
+              </tr>
+              <tr><td class="bg-blue-hl font-black-strong">Wt (gms)</td><td class="bg-blue-hl"><input type="number" step="0.01" name="Metal 2 Weight" placeholder="0.00" class="font-mono" onblur="formatDecimal(this,2)"></td></tr>
+              <tr>
+                <td class="font-black-strong bg-blue-hl">Product Type</td>
+                <td class="bg-blue-hl">
+                  <select name="ItemType" id="dd-itemType"></select>
+                </td>
+              </tr>
+              <tr>
+                <td class="font-black-strong">Sub Category</td>
+                <td>
+                  <select name="Sub Category" id="dd-subCategory"></select>
+                </td>
+              </tr>
+              <tr><td class="font-black-strong">Ref no</td><td><input type="text" name="Ref no"></td></tr>
+              <tr><td class="font-black-strong">Product Size</td><td><input type="text" name="Item Size" placeholder="e.g. US 6.50"></td></tr>
+              <tr><td class="font-black-strong">Two Tone</td><td><input type="text" name="Two Tone" placeholder="Yes/No"></td></tr>
+              <tr>
+                <td class="font-black-strong bg-blue-hl">Stamping</td>
+                <td class="bg-blue-hl">
+                  <select name="Stamping" id="dd-stamping"></select>
+                </td>
+              </tr>
+              <tr>
+                <td class="font-black-strong align-bottom">Rhodium</td>
+                <td class="align-bottom"><select name="Rhodium" id="dd-rhodium"></select></td>
+              </tr>
+              <tr>
+                <td class="font-black-strong border-b-0">Alloy type</td>
+                <td class="border-b-0"><select name="Alloy Type" id="dd-alloyType"></select></td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <table class="excel-table border-t-0 border-x-0 w-full border-black border-2 border-l-0 border-r-0">
+          <tr><td class="bg-blue-hl font-black-strong py-3">Client Instructions: <input type="text" name="Client Notes" class="inline w-4/5 ml-1" placeholder="Type instructions here..."></td></tr>
+        </table>
+
+        <div class="w-full border-b border-black">
+          <div class="bg-slate-800 text-white px-3 py-1.5 flex items-center justify-between">
+            <span class="text-white font-bold text-sm tracking-wide uppercase">Gemstone Specifications</span>
+            <span class="print-hidden"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="excel-table border-0 w-full" id="diamondTable">
+              <thead>
+                <tr class="text-center bg-blue-soft font-black-strong">
+                  <th class="border-l-0 w-24">Position</th>
+                  <th class="w-28">Stone</th>
+                  <th class="w-28">Shape</th>
+                  <th class="w-44 whitespace-nowrap">MM Size<br><span class="text-[9px] font-normal">(L x W x H)</span></th>
+                  <th class="w-20">Avg Dia Wt<br><span class="text-[9px] font-normal">(ct/pc)</span></th>
+                  <th class="w-16">Dia.Qty</th>
+                  <th class="w-20">Total Wt<br><span class="text-[9px] font-normal">(auto)</span></th>
+                  <th class="w-24">Setting</th>
+                  <th class="border-r-0 w-24">Diamond<br>Source</th>
+                  <th class="border-r-0 print-hidden w-6">❌</th>
+                </tr>
+              </thead>
+              <tbody id="diamondTableBody"></tbody>
+            </table>
+          </div>
+          <div class="p-2 print-hidden bg-slate-50 flex gap-2">
+            <button type="button" onclick="addDiamondRow('standard')" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-1 px-3 rounded text-xs transition-all">+ Standard Row</button>
+            <button type="button" onclick="addDiamondRow('custom')" class="bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold py-1 px-3 rounded text-xs transition-all">+ Custom Row</button>
+          </div>
+        </div>
+
+        <div class="w-full border-b border-black">
+          <div class="bg-slate-800 text-white px-3 py-1.5 flex items-center justify-between">
+            <span class="text-white font-bold text-sm tracking-wide uppercase">Reference Images</span>
+            <button type="button" onclick="addClientRefSlot()" class="print-hidden text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded">+ Add</button>
+          </div>
+          <div class="w-full p-3 bg-white">
+            <div id="clientRefContainer" class="flex flex-wrap gap-3 justify-center"></div>
+          </div>
+        </div>
+
+        <table class="excel-table border-0 w-full border-t-2 border-black">
+          <tr>
+            <td class="border-0 font-black-strong py-2 w-[30%]">No. of Stones: <span id="sumQty" class="font-normal ml-2">0</span></td>
+            <td class="border-0 font-black-strong py-2 w-[30%]">Total Wt: <span id="sumWt" class="font-normal ml-2">0.00</span> ct</td>
+            <td class="border-0 font-black-strong py-2 w-[40%]">Cad Designer:
+              <select name="CAD Designer" class="inline border-b border-black w-40 ml-1 font-bold">
+                <option value="">Select</option>
+                <option value="Gopal">Gopal</option>
+                <option value="Sudip">Sudip</option>
+                <option value="Aakash">Aakash</option>
+                <option value="Omkar">Omkar</option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="pt-6 flex justify-end print-hidden">
+        <button type="button" id="submitBtn" onclick="submitForm()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-xl shadow-lg cursor-pointer transition-all text-lg">
+          🚀 Sync Database & Download PDF
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const CAD_LOCK_PASSWORD = "admin"; 
+    let imageVersions = [
+      { id: 1, dataUrl: null, fileObj: null, locked: false },
+      { id: 2, dataUrl: null, fileObj: null, locked: false },
+      { id: 3, dataUrl: null, fileObj: null, locked: false }
+    ];
+    let activeTabId = 1;
+    let versionCounter = 3;
+    let clientRefImages = [
+      { id: 1, dataUrl: null },
+      { id: 2, dataUrl: null },
+      { id: 3, dataUrl: null }
+    ];
+    let clientRefCounter = 3;
+
+    // MASTER DATA EXTRACTED FROM YOUR EXCEL SHEET
+    const dropdownData = {
+        itemTypes: ["Ring", "Earring", "Studs", "Bracelet", "Armband", "Pendant", "Necklace", "Charm", "Bangle", "Nose stud", "Other", "Head", "Chain", "Clasp", "Earring Jackets", "Loop"],
+        subCategories: ["Bridal", "Fashion", "Eternity", "Solitaire"],
+        stamping: ["9K", "10K", "14K", "18K", "22K", "PT", "375", "417", "585", "750", "916", "950", "BRCZ", "AGCZ", "SS925", "AY", "AYCZ", "PT950", "9ct", "18ct", "14ct"],
+        stoneTypes: ["Mined", "LGD", "Mined+LGD", "Mined Semi", "LGD Semi", "Mount", "Color", "Color Semi", "Color+Mined", "Color+Mined Semi", "Color+LGD", "Color+LGD Semi", "Zircon", "Zircon Semi", "Mined+LGD Semi", "Color+LGD+CZ", "CZ", "Plain", "Mined+Lab+Colour"],
+        // mainColors/mainClarities removed along with the Color/Clarity columns.
+        alloyTypes: ["Standard", "Palladium", "Nickel Free", "Platinum", "SS925", "Gold Plated", "Nickel Safe"],
+        shapes: ["Round", "Baguette", "Carre", "Emerald", "Heart", "Marquise", "Oval", "Pear", "Princess", "Radiant", "Single Cut", "Sq. Cushion", "Sq. Emerald", "Tappered Bagguette", "Triangle", "Trilliant"],
+        settings: ["Prong", "Micro pave", "Micro prong", "Pave", "Channel", "Bezel", "French pave", "Plate prong", "Flush", "Pin set"],
+        diamondSources: ["Diacrown", "Customer"],
+        // Updated from the master alloy costing table (bifurcated 'Metal' values).
+        metalTypes: ["Wax", "Brass", "AG925", "AG935", "PT600", "PT900", "PT950", "9KT", "10KT", "14KT", "18KT", "22KT", "24KT"],
+        // New field from the same table's bifurcated 'Extra' column (Nickel Free / Palladium variants).
+        alloyExtra: ["NF", "PD"],
+        metalColors: ["WG", "YG", "RG", "WY", "YW", "WR", "RW", "YR", "RY", "YP", "RP", "950", "YWR", "YA", "WA", "RA"],
+        rhodium: ["Yes", "No", "N/A"]
+    };
+
+    // GEMSTONE SHAPE -> SIZE -> AVG WEIGHT LOOKUP (from reference sheet)
+    // Each shape maps to an array of { code, size, wt } entries.
+    const shapeSizeData = {"Round":[{"code":"RND0.7M","size":"0.7 mm (0.002 ct +/-)","wt":0.002},{"code":"RND0.8M","size":"0.8 mm (0.003 ct +/-)","wt":0.003},{"code":"RND0.9M","size":"0.9 mm (0.004 ct +/-)","wt":0.004},{"code":"RND1.0M","size":"1.0 mm (0.005 ct +/-)","wt":0.005},{"code":"RND1.1M","size":"1.1 mm (0.006 ct +/-)","wt":0.006},{"code":"RND1.2M","size":"1.2 mm (0.008 ct +/-)","wt":0.008},{"code":"RND1.3M","size":"1.3 mm (0.01 ct +/-)","wt":0.01},{"code":"RND1.4M","size":"1.4 mm (0.012 ct +/-)","wt":0.012},{"code":"RND1.5M","size":"1.5 mm (0.015 ct +/-)","wt":0.015},{"code":"RND1.6M","size":"1.6 mm (0.017 ct +/-)","wt":0.017},{"code":"RND1.7M","size":"1.7 mm (0.02 ct +/-)","wt":0.02},{"code":"RND1.8M","size":"1.8 mm (0.023 ct +/-)","wt":0.023},{"code":"RND1.9M","size":"1.9 mm (0.027 ct +/-)","wt":0.028},{"code":"RND2.0M","size":"2.0 mm (0.03 ct +/-)","wt":0.032},{"code":"RND2.1M","size":"2.1 mm (0.04 ct +/-)","wt":0.04},{"code":"RND2.2M","size":"2.2 mm (0.045 ct +/-)","wt":0.045},{"code":"RND2.3M","size":"2.3 mm (0.05 ct +/-)","wt":0.05},{"code":"RND2.4M","size":"2.4 mm (0.055 ct +/-)","wt":0.055},{"code":"RND2.5M","size":"2.5 mm (0.06 ct +/-)","wt":0.063},{"code":"RND2.6M","size":"2.6 mm (0.07 ct +/-)","wt":0.073},{"code":"RND2.7M","size":"2.7 mm (0.08ct +/-)","wt":0.08},{"code":"RND2.8M","size":"2.8 mm (0.08-0.09 ct +/-)","wt":0.087},{"code":"RND2.9M","size":"2.9 mm (0.09-0.10 ct +/-)","wt":0.097},{"code":"RND3.0M","size":"3.0 mm (0.10-0.11 ct +/-)","wt":0.107},{"code":"RND3.1M","size":"3.1 mm (0.11-0.12 ct +/-)","wt":0.117},{"code":"RND3.2M","size":"3.2 mm (0.12-0.13 ct +/-)","wt":0.127},{"code":"RND3.3M","size":"3.3 mm (0.14-0.145 ct +/-)","wt":0.143},{"code":"RND3.4M","size":"3.4 mm (0.15-0.16 ct +/-)","wt":0.155},{"code":"RND3.5M","size":"3.5 mm (0.16-0.17 ct +/-)","wt":0.165},{"code":"RND3.6M","size":"3.6 mm (0.17-0.18 ct +/-)","wt":0.175},{"code":"RND3.7M","size":"3.7 mm (0.19-0.21 ct +/-)","wt":0.2},{"code":"RND3.8M","size":"3.8 mm (0.21-0.23 ct +/-)","wt":0.22},{"code":"RND3.9M","size":"3.9 mm (0.23-0.24 ct +/-)","wt":0.235},{"code":"RND4.0M","size":"4.0 mm (0.24-0.26 ct +/-)","wt":0.255},{"code":"RND4.1M","size":"4.1 mm (0.26-0.29 ct +/-)","wt":0.275},{"code":"RND030W","size":"4.2-4.4 mm +/- (0.30-0.34 ct)","wt":0.32},{"code":"RND038W","size":"4.4-4.6 mm +/- (0.35-0.39 ct)","wt":0.365},{"code":"RND040W","size":"4.6-4.8 mm +/- (0.40-0.44 ct)","wt":0.415},{"code":"RND046W","size":"4.7-4.9 mm +/- (0.45-0.49 ct)","wt":0.47},{"code":"RND050W","size":"5.0-5.2 mm +/- (0.50-0.59 ct)","wt":0.51},{"code":"RND060W","size":"5.3-5.5 mm +/- (0.60-0.69 ct)","wt":0.61},{"code":"RND070W","size":"5.5-5.7 mm +/- (0.70-0.73 ct)","wt":0.72},{"code":"RND075W","size":"5.7-5.8 mm +/- (0.74-0.79 ct)","wt":0.76},{"code":"RND080W","size":"5.8-6.0 mm +/- (0.80-0.89 ct)","wt":0.81}],"Baguette":[{"code":"BAG1210M","size":"1.25 x 1.00 mm","wt":0.009},{"code":"BAG1507M","size":"1.50 x 0.75 mm","wt":0.008},{"code":"BAG1510M","size":"1.50 x 1.00 mm","wt":0.01},{"code":"BAG1512M","size":"1.50 x 1.25 mm","wt":0.02},{"code":"BAG1707M","size":"1.75 x 0.75 mm","wt":0.02},{"code":"BAG1710M","size":"1.75 x 1.00 mm","wt":0.01},{"code":"BAG1712M","size":"1.75 x 1.25 mm","wt":0.02},{"code":"BAG1715M","size":"1.75 x 1.50 mm","wt":0.03},{"code":"BAG2007M","size":"2.00 x 0.75 mm","wt":0.01},{"code":"BAG2010M","size":"2.00 x 1.00 mm","wt":0.02},{"code":"BAG2012M","size":"2.00 x 1.25 mm","wt":0.02},{"code":"BAG2015M","size":"2.00 x 1.50 mm","wt":0.03},{"code":"BAG2017M","size":"2.00 x 1.75 mm","wt":0.04},{"code":"BAG2207M","size":"2.25 x 0.75 mm","wt":0.01},{"code":"BAG2210M","size":"2.25 x 1.00 mm","wt":0.02},{"code":"BAG2212M","size":"2.25 x 1.25 mm","wt":0.03},{"code":"BAG2215M","size":"2.25 x 1.50 mm","wt":0.04},{"code":"BAG2217M","size":"2.25 x 1.75 mm","wt":0.05},{"code":"BAG2507M","size":"2.50 x 0.75 mm","wt":0.02},{"code":"BAG2510M","size":"2.50 x 1.00 mm","wt":0.02},{"code":"BAG2512M","size":"2.50 x 1.25 mm","wt":0.03},{"code":"BAG2515M","size":"2.50 x 1.50 mm","wt":0.04},{"code":"BAG2517M","size":"2.50 x 1.75 mm","wt":0.06},{"code":"BAG2520M","size":"2.50 x 2.00 mm","wt":0.07},{"code":"BAG2710M","size":"2.75 x 1.00 mm","wt":0.02},{"code":"BAG2712M","size":"2.75 x 1.25 mm","wt":0.04},{"code":"BAG2715M","size":"2.75 x 1.50 mm","wt":0.05},{"code":"BAG2717M","size":"2.75 x 1.75 mm","wt":0.06},{"code":"BAG2720M","size":"2.75 x 2.00 mm","wt":0.08},{"code":"BAG2722M","size":"2.75 x 2.25 mm","wt":0.1},{"code":"BAG3010M","size":"3.00 x 1.00 mm","wt":0.03},{"code":"BAG3012M","size":"3.00 x 1.25 mm","wt":0.04},{"code":"BAG3015M","size":"3.00 x 1.50 mm","wt":0.06},{"code":"BAG3017M","size":"3.00 x 1.75 mm","wt":0.07},{"code":"BAG3020M","size":"3.00 x 2.00 mm","wt":0.09},{"code":"BAG3022M","size":"3.00 x 2.25 mm","wt":0.11},{"code":"BAG3025M","size":"3.00 x 2.50 mm","wt":0.12},{"code":"BAG3210M","size":"3.25 x 1.00 mm","wt":0.03},{"code":"BAG3212M","size":"3.25 x 1.25 mm","wt":0.04},{"code":"BAG3215M","size":"3.25 x 1.50 mm","wt":0.06},{"code":"BAG3217M","size":"3.25 x 1.75 mm","wt":0.08},{"code":"BAG3220M","size":"3.25 x 2.00 mm","wt":0.1},{"code":"BAG3222M","size":"3.25 x 2.25 mm","wt":0.12},{"code":"BAG3225M","size":"3.25 x 2.50 mm","wt":0.14},{"code":"BAG3510M","size":"3.50 x 1.00 mm","wt":0.04},{"code":"BAG3512M","size":"3.50 x 1.25 mm","wt":0.05},{"code":"BAG3515M","size":"3.50 x 1.50 mm","wt":0.07},{"code":"BAG3517M","size":"3.50 x 1.75 mm","wt":0.09},{"code":"BAG3520M","size":"3.50 x 2.00 mm","wt":0.11},{"code":"BAG3522M","size":"3.50 x 2.25 mm","wt":0.12},{"code":"BAG3525M","size":"3.50 x 2.50 mm","wt":0.14},{"code":"BAG3710M","size":"3.75 x 1.00 mm","wt":0.04},{"code":"BAG3712M","size":"3.75 x 1.25 mm","wt":0.05},{"code":"BAG3715M","size":"3.75 x 1.50 mm","wt":0.07},{"code":"BAG3717M","size":"3.75 x 1.75 mm","wt":0.09},{"code":"BAG3720M","size":"3.75 x 2.00 mm","wt":0.12},{"code":"BAG3722M","size":"3.75 x 2.25 mm","wt":0.14},{"code":"BAG3725M","size":"3.75 x 2.50 mm","wt":0.16},{"code":"BAG4012M","size":"4.00 x 1.25 mm","wt":0.05},{"code":"BAG4015M","size":"4.00 x 1.50 mm","wt":0.07},{"code":"BAG4017M","size":"4.00 x 1.75 mm","wt":0.1},{"code":"BAG4020M","size":"4.00 x 2.00 mm","wt":0.13},{"code":"BAG4022M","size":"4.00 x 2.25 mm","wt":0.16},{"code":"BAG4025M","size":"4.00 x 2.50 mm","wt":0.19},{"code":"BAG4027M","size":"4.00 x 2.75 mm","wt":0.2},{"code":"BAG4030M","size":"4.00 x 3.00 mm","wt":0.23},{"code":"BAG4212M","size":"4.25 x 1.25 mm","wt":0.06},{"code":"BAG4215M","size":"4.25 x 1.50 mm","wt":0.08},{"code":"BAG4217M","size":"4.25 x 1.75 mm","wt":0.1},{"code":"BAG4220M","size":"4.25 x 2.00 mm","wt":0.14},{"code":"BAG4222M","size":"4.25 x 2.25 mm","wt":0.15},{"code":"BAG4225M","size":"4.25 x 2.50 mm","wt":0.19},{"code":"BAG4227M","size":"4.25 x 2.75 mm","wt":0.24},{"code":"BAG4512M","size":"4.50 x 1.25 mm","wt":0.06},{"code":"BAG4515M","size":"4.50 x 1.50 mm","wt":0.09},{"code":"BAG4517M","size":"4.50 x 1.75 mm","wt":0.12},{"code":"BAG4520M","size":"4.50 x 2.00 mm","wt":0.15},{"code":"BAG4522M","size":"4.50 x 2.25 mm","wt":0.18},{"code":"BAG4525M","size":"4.50 x 2.50 mm","wt":0.21},{"code":"BAG4527M","size":"4.50 x 2.75 mm","wt":0.25},{"code":"BAG4530M","size":"4.50 x 3.00 mm","wt":0.28},{"code":"BAG4715M","size":"4.75 x 1.50 mm","wt":0.09},{"code":"BAG4720M","size":"4.75 x 2.00 mm","wt":0.15},{"code":"BAG4725M","size":"4.75 x 2.50 mm","wt":0.22},{"code":"BAG5020M","size":"5.00 x 2.00 mm","wt":0.17},{"code":"BAG5025M","size":"5.00 x 2.50 mm","wt":0.24},{"code":"BAG5030M","size":"5.00 x 3.00 mm","wt":0.32},{"code":"BAG5525M","size":"5.50 x 2.50 mm","wt":0.27},{"code":"BAG5530M","size":"5.50 x 3.00 mm","wt":0.36},{"code":"BAG6030M","size":"6.00 x 3.00 mm","wt":0.42}],"Carre":[{"code":"CAR1.5M","size":"1.5 mm","wt":0.02},{"code":"CAR1.6M","size":"1.6 mm","wt":0.025},{"code":"CAR1.7M","size":"1.7 mm","wt":0.03},{"code":"CAR1.8M","size":"1.8 mm","wt":0.035},{"code":"CAR1.9M","size":"1.9 mm","wt":0.04},{"code":"CAR2.0M","size":"2.0 mm","wt":0.05},{"code":"CAR2.1M","size":"2.1 mm","wt":0.06},{"code":"CAR2.2M","size":"2.2 mm","wt":0.07},{"code":"CAR2.3M","size":"2.3 mm","wt":0.08},{"code":"CAR2.4M","size":"2.4 mm","wt":0.09},{"code":"CAR2.5M","size":"2.5 mm","wt":0.1},{"code":"CAR2.6M","size":"2.6 mm","wt":0.11},{"code":"CAR2.7M","size":"2.7 mm","wt":0.12},{"code":"CAR2.8M","size":"2.8 mm","wt":0.13},{"code":"CAR3.0M","size":"3.0 mm","wt":0.15},{"code":"CAR3.2M","size":"3.2 mm","wt":0.2},{"code":"CAR3.5M","size":"3.5 mm","wt":0.25},{"code":"CAR3.8M","size":"3.8 mm","wt":0.33},{"code":"CAR4.0M","size":"4.0 mm","wt":0.4}],"Emerald":[{"code":"EME033W","size":"4.50 x 3.30 mm","wt":0.33},{"code":"EME040W","size":"5.00 x 3.50 mm","wt":0.37},{"code":"EME3023M","size":"3.00 x 2.30 mm","wt":0.1},{"code":"EME3223M","size":"3.20 x 2.30 mm","wt":0.1},{"code":"EME3725M","size":"3.75 x 2.50 mm","wt":0.15},{"code":"EME3727M","size":"3.75 x 2.75 mm","wt":0.19},{"code":"EME4030M","size":"4.00 x 3.00 mm","wt":0.24},{"code":"EME4430M","size":"4.45 x 3.00 mm","wt":0.275}],"Heart":[{"code":"HRT033W","size":"4.10 x 4.60 mm","wt":0.33},{"code":"HRT037W","size":"4.20 x 4.80 mm","wt":0.37},{"code":"HRT2730M","size":"2.70 x 3.00 mm","wt":0.1},{"code":"HRT3235M","size":"3.20 x 3.50 mm","wt":0.15},{"code":"HRT3638M","size":"3.60 x 3.80 mm","wt":0.2},{"code":"HRT3943M","size":"3.90 x 4.30 mm","wt":0.25}],"Marquise":[{"code":"MQS033W","size":"6.00 x 3.50 mm","wt":0.33},{"code":"MQS2512M","size":"2.50 x 1.25 mm","wt":0.02},{"code":"MQS3015M","size":"3.00 x 1.50 mm","wt":0.04},{"code":"MQS3116M","size":"3.10 x 1.60 mm","wt":0.04},{"code":"MQS3517M","size":"3.50 x 1.75 mm","wt":0.05},{"code":"MQS3520M","size":"3.50 x 2.00 mm","wt":0.05},{"code":"MQS3717M","size":"3.75 x 1.75 mm","wt":0.05},{"code":"MQS4020M","size":"4.00 x 2.00 mm","wt":0.065},{"code":"MQS4222M","size":"4.25 x 2.25 mm","wt":0.07},{"code":"MQS4525M","size":"4.50 x 2.25 mm","wt":0.09},{"code":"MQS5025M","size":"5.00 x 2.50 mm","wt":0.12},{"code":"MQS5030M","size":"5.00 x 3.00 mm","wt":0.2},{"code":"MQS6030M","size":"6.00 x 3.00 mm","wt":0.25}],"Oval":[{"code":"OVL030W","size":"5.40 x 3.80 mm","wt":0.33},{"code":"OVL3020M","size":"3.00 x 2.00 mm","wt":0.055},{"code":"OVL3023M","size":"3.00 x 2.30 mm","wt":0.07},{"code":"OVL3525M","size":"3.50 x 2.50 mm","wt":0.09},{"code":"OVL3627M","size":"3.60 x 2.70 mm","wt":0.1},{"code":"OVL4030M","size":"4.00 x 3.00 mm","wt":0.15},{"code":"OVL4535M","size":"4.50 x 3.50 mm","wt":0.2},{"code":"OVL4833M","size":"4.80 x 3.30 mm","wt":0.21},{"code":"OVL5035M","size":"5.00 x 3.50 mm","wt":0.25}],"Princess":[{"code":"PRN030W","size":"3.7 mm","wt":0.33},{"code":"PRN040W","size":"4.0 mm","wt":0.4},{"code":"PRN046W","size":"4.1 mm","wt":0.46},{"code":"PRN050W","size":"4.3 mm","wt":0.5},{"code":"PRN060W","size":"4.5 mm","wt":0.6},{"code":"PRN1.4M","size":"1.4 mm","wt":0.015},{"code":"PRN1.5M","size":"1.5 mm","wt":0.02},{"code":"PRN1.6M","size":"1.6 mm","wt":0.025},{"code":"PRN1.7M","size":"1.7 mm","wt":0.03},{"code":"PRN1.8M","size":"1.8 mm","wt":0.035},{"code":"PRN1.9M","size":"1.9 mm","wt":0.04},{"code":"PRN2.0M","size":"2.0 mm","wt":0.05},{"code":"PRN2.1M","size":"2.1 mm","wt":0.06},{"code":"PRN2.2M","size":"2.2 mm","wt":0.07},{"code":"PRN2.3M","size":"2.3 mm","wt":0.08},{"code":"PRN2.4M","size":"2.4 mm","wt":0.09},{"code":"PRN2.5M","size":"2.5 mm","wt":0.1},{"code":"PRN2.6M","size":"2.6 mm","wt":0.11},{"code":"PRN2.7M","size":"2.7 mm","wt":0.12},{"code":"PRN2.8M","size":"2.8 mm","wt":0.13}],"Pear":[{"code":"PSH030W","size":"5.70 x 3.70 mm","wt":0.33},{"code":"PSH040W","size":"6.00 x 4.00 mm","wt":0.33},{"code":"PSH2517M","size":"2.50 x 1.7 mm","wt":0.03},{"code":"PSH3020M","size":"3.00 x 2.00 mm","wt":0.05},{"code":"PSH3522M","size":"3.50 x 2.20 mm","wt":0.07},{"code":"PSH4025M","size":"4.00 x 2.50 mm","wt":0.1},{"code":"PSH4030M","size":"4.00 x 3.00 mm","wt":0.14},{"code":"PSH4127M","size":"4.10 x 2.70 mm","wt":0.11},{"code":"PSH4530M","size":"4.50 x 3.00 mm","wt":0.15},{"code":"PSH5030M","size":"5.00 x 3.00 mm","wt":0.2},{"code":"PSH5535M","size":"5.50 x 3.50 mm","wt":0.25}],"Radiant":[{"code":"RAD2320M","size":"2.30 x 2.00 mm","wt":0.05},{"code":"RAD2723M","size":"2.70 x 2.30 mm","wt":0.1},{"code":"RAD3024M","size":"3.00 x 2.40 mm","wt":0.1},{"code":"RAD3528M","size":"3.50 x 2.80 mm","wt":0.15},{"code":"RAD3830M","size":"3.80 x 3.00 mm","wt":0.2},{"code":"RAD4035M","size":"4.00 x 3.50 mm","wt":0.25}],"Sq. Cushion":[{"code":"SCU30M","size":"3.00 x 3.00 mm","wt":0.15},{"code":"SCU33M","size":"3.30 x 3.30 mm","wt":0.2},{"code":"SCU36M","size":"3.60 x 3.60 mm","wt":0.25},{"code":"SCU38M","size":"3.80 x 3.80 mm","wt":0.33},{"code":"SCU42M","size":"4.25 x 4.25 mm","wt":0.37}],"Sq. Emerald":[{"code":"SEM033W","size":"4.00 x 4.00 mm","wt":0.4},{"code":"SEM15M","size":"1.50 x 1.50 mm","wt":0.02},{"code":"SEM16M","size":"1.60 x 1.60 mm","wt":0.025},{"code":"SEM17M","size":"1.70 x 1.70 mm","wt":0.03},{"code":"SEM18M","size":"1.80 x 1.80 mm","wt":0.035},{"code":"SEM19M","size":"1.90 x 1.90 mm","wt":0.04},{"code":"SEM20M","size":"2.00 x 2.00 mm","wt":0.05},{"code":"SEM21M","size":"2.10 x 2.10 mm","wt":0.06},{"code":"SEM22M","size":"2.20 x 2.20 mm","wt":0.07},{"code":"SEM23M","size":"2.30 x 2.30 mm","wt":0.08},{"code":"SEM24M","size":"2.40 x 2.40 mm","wt":0.08},{"code":"SEM25M","size":"2.50 x 2.50 mm","wt":0.095},{"code":"SEM26M","size":"2.60 x 2.60 mm","wt":0.1},{"code":"SEM27M","size":"2.70 x 2.70 mm","wt":0.11},{"code":"SEM28M","size":"2.80 x 2.80 mm","wt":0.12},{"code":"SEM29M","size":"2.90 x 2.90 mm","wt":0.135},{"code":"SEM30M","size":"3.00 x 3.00 mm","wt":0.15},{"code":"SEM31M","size":"3.10 x 3.10 mm","wt":0.17},{"code":"SEM32M","size":"3.20 x 3.20 mm","wt":0.19},{"code":"SEM33M","size":"3.30 x 3.30 mm","wt":0.2},{"code":"SEM34M","size":"3.40 x 3.40 mm","wt":0.24},{"code":"SEM35M","size":"3.50 x 3.50 mm","wt":0.26},{"code":"SEM36M","size":"3.60 x 3.60 mm","wt":0.33}],"Tappered Bagguette":[{"code":"TAP151007","size":"1.50 x 1.00 x 0.75 mm","wt":0.01},{"code":"TAP151210","size":"1.50 x 1.25 x 1.00 mm","wt":0.01},{"code":"TAP170705","size":"1.75 x 0.75 x 0.50 mm","wt":0.008},{"code":"TAP171005","size":"1.75 x 1.00 x 0.50 mm","wt":0.01},{"code":"TAP171007","size":"1.75 x 1.00 x 0.75 mm","wt":0.01},{"code":"TAP171210","size":"1.75 x 1.25 x 1.00 mm","wt":0.02},{"code":"TAP171510","size":"1.75 x 1.50 x 1.00 mm","wt":0.02},{"code":"TAP171512","size":"1.75 x 1.50 x 1.25 mm","wt":0.02},{"code":"TAP201005","size":"2.00 x 1.00 x 0.50 mm","wt":0.01},{"code":"TAP201007","size":"2.00 x 1.00 x 0.75 mm","wt":0.01},{"code":"TAP201210","size":"2.00 x 1.25 x 1.00 mm","wt":0.02},{"code":"TAP201510","size":"2.00 x 1.50 x 1.00 mm","wt":0.02},{"code":"TAP201512","size":"2.00 x 1.50 x 1.25 mm","wt":0.03},{"code":"TAP221005","size":"2.25 x 1.00 x 0.50 mm","wt":0.01},{"code":"TAP221207","size":"2.25 x 1.25 x 0.75 mm","wt":0.02},{"code":"TAP221210","size":"2.25 x 1.25 x 1.00 mm","wt":0.02},{"code":"TAP221510","size":"2.25 x 1.50 x 1.00 mm","wt":0.03},{"code":"TAP221512","size":"2.25 x 1.50 x 1.25 mm","wt":0.04},{"code":"TAP221712","size":"2.25 x 1.75 x 1.25 mm","wt":0.04},{"code":"TAP221715","size":"2.25 x 1.75 x 1.50 mm","wt":0.05},{"code":"TAP222015","size":"2.25 x 2.00 x 1.50 mm","wt":0.05},{"code":"TAP251005","size":"2.50 x 1.00 x 0.50 mm","wt":0.02},{"code":"TAP251007","size":"2.50 x 1.00 x 0.75 mm","wt":0.02},{"code":"TAP251210","size":"2.50 x 1.25 x 1.00 mm","wt":0.03},{"code":"TAP251510","size":"2.50 x 1.50 x 1.00 mm","wt":0.03},{"code":"TAP251512","size":"2.50 x 1.50 x 1.25 mm","wt":0.04},{"code":"TAP251710","size":"2.50 x 1.75 x 1.00 mm","wt":0.04},{"code":"TAP251712","size":"2.50 x 1.75 x 1.25 mm","wt":0.05},{"code":"TAP252015","size":"2.50 x 2.00 x 1.50 mm","wt":0.05},{"code":"TAP271005","size":"2.75 x 1.00 x 0.50 mm","wt":0.02},{"code":"TAP271207","size":"2.75 x 1.25 x 0.75 mm","wt":0.03},{"code":"TAP271210","size":"2.75 x 1.25 x 1.00 mm","wt":0.03},{"code":"TAP271510","size":"2.75 x 1.50 x 1.00 mm","wt":0.04},{"code":"TAP271512","size":"2.75 x 1.50 x 1.25 mm","wt":0.04},{"code":"TAP271712","size":"2.75 x 1.75 x 1.25 mm","wt":0.05},{"code":"TAP271715","size":"2.75 x 1.75 x 1.50 mm","wt":0.05},{"code":"TAP272015","size":"2.75 x 2.00 x 1.50 mm","wt":0.07},{"code":"TAP301207","size":"3.00 x 1.25 x 0.75 mm","wt":0.03},{"code":"TAP301210","size":"3.00 x 1.25 x 1.00 mm","wt":0.04},{"code":"TAP301510","size":"3.00 x 1.50 x 1.00 mm","wt":0.04},{"code":"TAP301512","size":"3.00 x 1.50 x 1.25 mm","wt":0.05},{"code":"TAP301710","size":"3.00 x 1.75 x 1.00 mm","wt":0.06},{"code":"TAP301712","size":"3.00 x 1.75 x 1.25 mm","wt":0.06},{"code":"TAP302010","size":"3.00 x 2.00 x 1.00 mm","wt":0.06},{"code":"TAP302015","size":"3.00 x 2.00 x 1.50 mm","wt":0.07},{"code":"TAP302017","size":"3.00 x 2.00 x 1.75 mm","wt":0.08},{"code":"TAP302517","size":"3.00 x 2.50 x 1.75 mm","wt":0.09},{"code":"TAP321005","size":"3.25 x 1.00 x 0.50 mm","wt":0.02},{"code":"TAP321207","size":"3.25 x 1.25 x 0.75 mm","wt":0.03},{"code":"TAP321210","size":"3.25 x 1.25 x 1.00 mm","wt":0.03},{"code":"TAP321507","size":"3.25 x 1.50 x 0.75 mm","wt":0.04},{"code":"TAP321510","size":"3.25 x 1.50 x 1.00 mm","wt":0.05},{"code":"TAP321512","size":"3.25 x 1.50 x 1.25 mm","wt":0.05},{"code":"TAP321710","size":"3.25 x 1.75 x 1.00 mm","wt":0.06},{"code":"TAP321712","size":"3.25 x 1.75 x 1.25 mm","wt":0.06},{"code":"TAP321715","size":"3.25 x 1.75 x 1.50 mm","wt":0.06},{"code":"TAP322010","size":"3.25 x 2.00 x 1.00 mm","wt":0.07},{"code":"TAP322012","size":"3.25 x 2.00 x 1.25 mm","wt":0.07},{"code":"TAP322015","size":"3.25 x 2.00 x 1.50 mm","wt":0.07},{"code":"TAP322517","size":"3.25 x 2.50 x 1.75 mm","wt":0.1},{"code":"TAP351210","size":"3.50 x 1.25 x 1.00 mm","wt":0.04},{"code":"TAP351510","size":"3.50 x 1.50 x 1.00 mm","wt":0.05},{"code":"TAP351512","size":"3.50 x 1.50 x 1.25 mm","wt":0.05},{"code":"TAP351710","size":"3.50 x 1.75 x 1.00 mm","wt":0.06},{"code":"TAP351712","size":"3.50 x 1.75 x 1.25 mm","wt":0.07},{"code":"TAP352010","size":"3.50 x 2.00 x 1.00 mm","wt":0.08},{"code":"TAP352012","size":"3.50 x 2.00 x 1.25 mm","wt":0.08},{"code":"TAP352015","size":"3.50 x 2.00 x 1.50 mm","wt":0.08},{"code":"TAP352515","size":"3.50 x 2.50 x 1.50 mm","wt":0.1},{"code":"TAP371210","size":"3.75 x 1.25 x 1.00 mm","wt":0.05},{"code":"TAP371510","size":"3.75 x 1.50 x 1.00 mm","wt":0.06},{"code":"TAP371712","size":"3.75 x 1.75 x 1.25 mm","wt":0.07},{"code":"TAP372012","size":"3.75 x 2.00 x 1.25 mm","wt":0.09},{"code":"TAP372015","size":"3.75 x 2.00 x 1.50 mm","wt":0.1},{"code":"TAP372217","size":"3.75 x 2.25 x 1.75 mm","wt":0.11},{"code":"TAP401210","size":"4.00 x 1.25 x 1.00 mm","wt":0.04},{"code":"TAP401510","size":"4.00 x 1.50 x 1.00 mm","wt":0.06},{"code":"TAP401712","size":"4.00 x 1.75 x 1.25 mm","wt":0.08},{"code":"TAP402010","size":"4.00 x 2.00 x 1.00 mm","wt":0.08},{"code":"TAP402015","size":"4.00 x 2.00 x 1.50 mm","wt":0.1},{"code":"TAP402515","size":"4.00 x 2.50 x 1.50 mm","wt":0.13},{"code":"TAP402517","size":"4.00 x 2.50 x 1.75 mm","wt":0.13},{"code":"TAP422015","size":"4.25 x 2.00 x 1.50 mm","wt":0.11},{"code":"TAP422215","size":"4.25 x 2.25 x 1.50 mm","wt":0.13},{"code":"TAP422515","size":"4.25 x 2.50 x 1.50 mm","wt":0.14},{"code":"TAP422717","size":"4.25 x 2.75 x 1.75 mm","wt":0.18},{"code":"TAP451512","size":"4.50 x 1.50 x 1.25 mm","wt":0.08},{"code":"TAP452010","size":"4.50 x 2.00 x 1.00 mm","wt":0.09},{"code":"TAP452015","size":"4.50 x 2.00 x 1.50 mm","wt":0.11},{"code":"TAP452215","size":"4.50 x 2.25 x 1.50 mm","wt":0.13},{"code":"TAP452515","size":"4.50 x 2.50 x 1.50 mm","wt":0.16},{"code":"TAP452517","size":"4.50 x 2.50 x 1.75 mm","wt":0.15},{"code":"TAP452717","size":"4.50 x 2.75 x 1.75 mm","wt":0.19},{"code":"TAP471715","size":"4.75 x 1.75 x 1.50 mm","wt":0.11},{"code":"TAP472015","size":"4.75 x 2.00 x 1.50 mm","wt":0.13},{"code":"TAP472515","size":"4.75 x 2.50 x 1.50 mm","wt":0.17},{"code":"TAP472520","size":"4.75 x 2.50 x 2.00 mm","wt":0.18},{"code":"TAP473020","size":"4.75 x 3.00 x 2.00 mm","wt":0.22},{"code":"TAP502212","size":"5.00 x 2.25 x 1.25 mm","wt":0.13},{"code":"TAP502217","size":"5.00 x 2.25 x 1.75 mm","wt":0.16},{"code":"TAP502720","size":"5.00 x 2.75 x 2.00 mm","wt":0.23},{"code":"TAP552510","size":"5.50 x 2.50 x 1.00 mm","wt":0.17},{"code":"TAP552522","size":"5.50 x 2.50 x 2.25 mm","wt":0.23},{"code":"TAP553022","size":"5.50 x 3.00 x 2.25 mm","wt":0.3},{"code":"TAP602015","size":"6.00 x 2.00 x 1.50 mm","wt":0.18},{"code":"TAP603022","size":"6.00 x 3.00 x 2.25 mm","wt":0.28}],"Triangle":[{"code":"TRG030W","size":"5.00 x 5.00 x 5.00 mm","wt":0.3},{"code":"TRG040W","size":"5.50 x 5.50 x 5.50 mm","wt":0.37},{"code":"TRG25M","size":"2.50 x 2.50 x 2.50 mm","wt":0.04},{"code":"TRG30M","size":"3.00 x 3.00 x 3.00 mm","wt":0.09},{"code":"TRG35M","size":"3.50 x 3.50 x 3.50 mm","wt":0.12},{"code":"TRG40M","size":"4.00 x 4.00 x 4.00 mm","wt":0.15},{"code":"TRG45M","size":"4.50 x 4.50 x 4.50 mm","wt":0.22}],"Trilliant":[{"code":"TRN011W","size":"3.3~3.6 mm","wt":0.1},{"code":"TRN014W","size":"3.7~3.9 mm","wt":0.15},{"code":"TRN020W","size":"4.0~4.2 mm","wt":0.2},{"code":"TRN025W","size":"4.30~4.4 mm","wt":0.25},{"code":"TRN030W","size":"4.5~5.0 mm","wt":0.33},{"code":"TRN040W","size":"5.5~5.8 mm","wt":0.4}],"Single Cut":[]};
+
+    function populateDropdown(selectId, optionsArray, placeholder = "Select") {
+        const select = document.getElementById(selectId);
+        if(!select) return;
+        select.innerHTML = `<option value="">${placeholder}</option>`;
+        optionsArray.forEach(opt => {
+            select.innerHTML += `<option value="${opt}">${opt}</option>`;
+        });
+    }
+
+    function initializeDropdowns() {
+        populateDropdown('dd-itemType', dropdownData.itemTypes, "Type");
+        populateDropdown('dd-subCategory', dropdownData.subCategories);
+        populateDropdown('dd-stamping', dropdownData.stamping);
+        populateDropdown('dd-alloyType', dropdownData.alloyTypes);
+        populateDropdown('dd-rhodium', dropdownData.rhodium);
+        populateDropdown('dd-metalType1', dropdownData.metalTypes, "Type");
+        populateDropdown('dd-metalColor1', dropdownData.metalColors, "Col");
+        populateDropdown('dd-metalExtra1', dropdownData.alloyExtra, "-");
+        populateDropdown('dd-metalType2', dropdownData.metalTypes, "Type");
+        populateDropdown('dd-metalColor2', dropdownData.metalColors, "Col");
+        populateDropdown('dd-metalExtra2', dropdownData.alloyExtra, "-");
+    }
+
+    function initApp() {
+      try {
+        initializeDropdowns();
+        
+        const today = new Date().toISOString().split('T')[0];
+        document.querySelector('input[name="Inquiry start date"]').value = today;
+        
+        for(let i=0; i<5; i++) { addDiamondRow('standard'); }
+        
+        renderImageTabs();
+        renderClientRefImages();
+        
+        document.getElementById('load-pdf-btn').addEventListener('click', () => document.getElementById('pdf-upload').click());
+        document.getElementById('pdf-upload').addEventListener('change', handlePdfUpload);
+      } catch (initErr) {
+        // Surface this on-page too, not just in DevTools console — makes any
+        // future init failure immediately visible without needing F12.
+        console.error('initApp failed:', initErr);
+        const banner = document.createElement('div');
+        banner.style.cssText = 'background:#dc2626;color:#fff;padding:12px;font-weight:bold;text-align:center;position:fixed;top:0;left:0;right:0;z-index:99999;';
+        banner.textContent = 'Form failed to initialize: ' + initErr.message + ' (check browser console for details)';
+        document.body.prepend(banner);
+      }
+    }
+
+    // Defensive against Apps Script's iframe-based page serving: if
+    // DOMContentLoaded already fired by the time this script runs (a real
+    // possibility depending on how Apps Script injects the templated HTML),
+    // a plain addEventListener('DOMContentLoaded', ...) would silently never
+    // fire and NONE of the initialization above would ever run — with no
+    // error thrown anywhere, since nothing actually broke, it just never
+    // started. Checking document.readyState first eliminates that race
+    // entirely: if the document is already interactive/complete, run init
+    // immediately instead of waiting for an event that may never come.
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+
+    function renderImageTabs() {
+      const tabsContainer = document.getElementById('tabs-container');
+      const contentContainer = document.getElementById('tab-content-container');
+      let tabsHtml = '';
+      imageVersions.forEach((v, index) => {
+        let isActive = v.id === activeTabId;
+        let bgClass = isActive ? 'bg-blue-200 border-b-0 text-blue-900 z-10' : 'bg-slate-50 text-slate-500 hover:bg-blue-100 border-b';
+        tabsHtml += `<button type="button" onclick="setActiveTab(${v.id})" class="px-4 py-2 text-sm font-bold border border-blue-400 rounded-t-md ${bgClass} -mb-[1px] mr-1 transition-colors">V${index + 1}</button>`;
+      });
+      tabsHtml += `<button type="button" onclick="addNewVersion()" class="px-3 py-2 text-sm font-bold text-blue-600 hover:bg-blue-100 border-b border-blue-400 -mb-[1px] transition-colors">+ Add Version</button>`;
+      tabsContainer.innerHTML = tabsHtml;
+
+      let activeV = imageVersions.find(v => v.id === activeTabId);
+      if (activeV.locked) {
+        contentContainer.innerHTML = `
+          <div class="absolute top-2 right-2 flex gap-2 z-20 print-hidden">
+            <button type="button" onclick="unlockVersion(${activeV.id})" class="text-xs bg-slate-800 text-white px-3 py-1 rounded shadow hover:bg-slate-700">🔒 Unlock</button>
+          </div>
+          <img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in">
+        `;
+      } else {
+        contentContainer.innerHTML = `
+          <div class="absolute top-2 right-2 flex gap-2 z-20 print-hidden">
+            ${activeV.dataUrl ? `<button type="button" onclick="lockVersion(${activeV.id})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded shadow hover:bg-blue-700">🔓 Lock</button>` : ''}
+            ${imageVersions.length > 1 ? `<button type="button" onclick="deleteVersion(${activeV.id})" class="text-xs bg-red-600 text-white px-3 py-1 rounded shadow hover:bg-red-700">🗑️ Delete</button>` : ''}
+          </div>
+          <input type="file" onchange="handleVersionUpload(event, ${activeV.id})" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+          ${activeV.dataUrl ? `<img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in z-20">` : `<div class="text-center pointer-events-none"><span class="text-blue-400 font-bold block mb-2 text-lg">CAD Version ${imageVersions.indexOf(activeV) + 1}</span><span class="text-xs text-slate-500 border border-slate-300 bg-slate-100 px-3 py-2 rounded shadow-sm">Choose File</span></div>`}
+        `;
+      }
+      const pdfImg = document.getElementById('pdfImgMain');
+      if(activeV.dataUrl) { pdfImg.src = activeV.dataUrl; pdfImg.classList.remove('hidden'); } 
+      else { pdfImg.classList.add('hidden'); }
+    }
+
+    function setActiveTab(id) { activeTabId = id; renderImageTabs(); }
+    function addNewVersion() { versionCounter++; const newV = { id: versionCounter, dataUrl: null, fileObj: null, locked: false }; imageVersions.push(newV); activeTabId = newV.id; renderImageTabs(); }
+    function deleteVersion(id) { if(confirm("Delete this CAD version?")) { imageVersions = imageVersions.filter(v => v.id !== id); activeTabId = imageVersions[imageVersions.length - 1].id; renderImageTabs(); } }
+    
+    function handleVersionUpload(event, id) {
+      const file = event.target.files[0];
+      if (file) {
+        const r = new FileReader();
+        r.onload = function(e) {
+          let v = imageVersions.find(v => v.id === id);
+          v.dataUrl = e.target.result;
+          v.fileObj = { base64: e.target.result.split(',')[1], dataURI: e.target.result, mimeType: file.type, name: file.name };
+          renderImageTabs();
+        }
+        r.readAsDataURL(file);
+      }
+    }
+
+    function lockVersion(id) { let v = imageVersions.find(v => v.id === id); v.locked = true; renderImageTabs(); }
+    function unlockVersion(id) {
+      let pwd = prompt("Enter password to unlock this CAD version:");
+      if(pwd === CAD_LOCK_PASSWORD) { let v = imageVersions.find(v => v.id === id); v.locked = false; renderImageTabs(); } 
+      else if (pwd !== null) { alert("❌ Incorrect password."); }
+    }
+
+    function openModal(imageSrc) { document.getElementById('modalImage').src = imageSrc; document.getElementById('imageModal').classList.remove('hidden'); }
+    function closeModal() { document.getElementById('imageModal').classList.add('hidden'); }
+
+    function getDropdownOptions(array, placeholder) {
+        let html = `<option value="">${placeholder}</option>`;
+        if(array) array.forEach(opt => html += `<option value="${opt}">${opt}</option>`);
+        return html;
+    }
+
+    function addDiamondRow(mode) {
+      mode = mode === 'custom' ? 'custom' : 'standard';
+      const tbody = document.getElementById('diamondTableBody');
+      const tr = document.createElement('tr');
+      const rowIdx = tbody.querySelectorAll('.d-row').length;
+      tr.className = "d-row text-center" + (rowIdx % 2 === 1 ? " bg-slate-50" : "") + (mode === 'custom' ? " bg-amber-50/40" : "");
+      tr.dataset.rowMode = mode;
+
+      const posCell = `<td class="border-l-0"><select class="d-pos w-full text-center font-bold text-blue-700 bg-blue-50">
+          <option value="Center">Center</option>
+          <option value="Side">Side</option>
+          <option value="Accent stones">Accent stones</option>
+          <option value="Halo">Halo</option>
+          <option value="Hidden Halo">Hidden Halo</option>
+          <option value="Stones on Rail">Stones on Rail</option>
+          <option value="Inside">Inside</option>
+        </select></td>`;
+
+      if (mode === 'custom') {
+        // CUSTOM ROW: every field except Position is free text, so any stone/shape/spec
+        // not covered by the standard dropdown lists can still be recorded.
+        tr.innerHTML = `
+          ${posCell}
+          <td><input type="text" class="d-stone w-full text-center" placeholder="Type stone..."></td>
+          <td><input type="text" class="d-shape w-full text-center" placeholder="Type shape..."></td>
+          <td class="whitespace-nowrap border-0 p-1">
+             <div class="d-dims-manual flex flex-row justify-center items-center gap-1 mt-1">
+               <input type="number" step="0.01" class="d-len dim-input" placeholder="L" onblur="formatDecimal(this,2)">x
+               <input type="number" step="0.01" class="d-wid dim-input" placeholder="W" onblur="formatDecimal(this,2)">x
+               <input type="number" step="0.01" class="d-hei dim-input" placeholder="H" onblur="formatDecimal(this,2)">
+             </div>
+          </td>
+          <td><input type="number" step="0.0001" class="d-avgwt w-full text-center font-mono" placeholder="0.0000" oninput="recalcTotals()" onblur="formatDecimal(this,4)"></td>
+          <td><input type="number" class="d-qty w-full text-center" placeholder="0" oninput="recalcTotals()"></td>
+          <td><input type="number" step="0.001" class="d-tot w-full text-center bg-slate-100 font-bold font-mono" readonly tabindex="-1"></td>
+          <td><input type="text" class="d-set w-full text-center" placeholder="Setting..."></td>
+          <td class="border-r-0"><input type="text" class="d-source w-full text-center" placeholder="Source..."></td>
+          <td class="border-r-0 print-hidden"><button type="button" class="remove-btn" onclick="removeRow(this)">❌</button></td>
+        `;
+      } else {
+        // STANDARD ROW: the original dropdown-driven fields with shape-based size/weight lookup.
+        tr.innerHTML = `
+          ${posCell}
+          <td><select class="d-stone w-full text-center">${getDropdownOptions(dropdownData.stoneTypes, "Type")}</select></td>
+          <td><select class="d-shape w-full text-center" onchange="onShapeChange(this)">${getDropdownOptions(dropdownData.shapes, "Shape")}</select></td>
+          <td class="whitespace-nowrap border-0 p-1">
+             <select class="d-size w-full text-center text-xs" onchange="onSizeChange(this)">
+               <option value="">Select Shape First</option>
+             </select>
+             <div class="d-dims-manual hidden flex flex-row justify-center items-center gap-1 mt-1">
+               <input type="number" step="0.01" class="d-len dim-input" placeholder="L" onblur="formatDecimal(this,2)">x
+               <input type="number" step="0.01" class="d-wid dim-input" placeholder="W" onblur="formatDecimal(this,2)">x
+               <input type="number" step="0.01" class="d-hei dim-input" placeholder="H" onblur="formatDecimal(this,2)">
+             </div>
+          </td>
+          <td><input type="number" step="0.0001" class="d-avgwt w-full text-center font-mono" placeholder="0.0000" oninput="recalcTotals()" onblur="formatDecimal(this,4)"></td>
+          <td><input type="number" class="d-qty w-full text-center" placeholder="0" oninput="recalcTotals()"></td>
+          <td><input type="number" step="0.001" class="d-tot w-full text-center bg-slate-100 font-bold font-mono" readonly tabindex="-1"></td>
+          <td><select class="d-set w-full text-center">${getDropdownOptions(dropdownData.settings, "Setting")}</select></td>
+          <td class="border-r-0"><select class="d-source w-full text-center">${getDropdownOptions(dropdownData.diamondSources, "Source")}</select></td>
+          <td class="border-r-0 print-hidden"><button type="button" class="remove-btn" onclick="removeRow(this)">❌</button></td>
+        `;
+      }
+
+      tbody.appendChild(tr);
+    }
+
+    // Formats a numeric input field to a fixed number of decimal places on blur,
+    // so values always display consistently (e.g. 0.5 -> 0.50, 2 -> 2.00).
+    // Leaves the field blank if it has no value, so placeholders still work.
+    function formatDecimal(input, places) {
+      if (input.value === '' || input.value === null) return;
+      const num = parseFloat(input.value);
+      if (isNaN(num)) return;
+      input.value = num.toFixed(places);
+    }
+
+    // Populates the MM Size dropdown for a row based on the chosen Shape.
+    // Falls back to free-text L x W x H inputs if the shape has no size data (e.g. Single Cut)
+    // or if the user picks "Custom / Other Size".
+    function onShapeChange(shapeSelect) {
+      const row = shapeSelect.closest('tr');
+      const sizeSelect = row.querySelector('.d-size');
+      const dimsManual = row.querySelector('.d-dims-manual');
+      const shape = shapeSelect.value;
+      const entries = shapeSizeData[shape] || [];
+
+      // Reset manual dims + avg wt whenever shape changes
+      row.querySelector('.d-len').value = '';
+      row.querySelector('.d-wid').value = '';
+      row.querySelector('.d-hei').value = '';
+      dimsManual.classList.add('hidden');
+
+      if (!shape) {
+        sizeSelect.innerHTML = '<option value="">Select Shape First</option>';
+        sizeSelect.classList.remove('hidden');
+        return;
+      }
+
+      if (entries.length === 0) {
+        // No size data for this shape (e.g. Single Cut) -> go straight to manual L x W x H
+        sizeSelect.innerHTML = '';
+        sizeSelect.classList.add('hidden');
+        dimsManual.classList.remove('hidden');
+        return;
+      }
+
+      sizeSelect.classList.remove('hidden');
+      let html = '<option value="">Select Size</option>';
+      entries.forEach((e, idx) => {
+        html += `<option value="${idx}">${e.size}${e.wt !== null ? ' - ' + e.wt + 'ct' : ''}</option>`;
+      });
+      html += '<option value="custom">Custom / Other Size...</option>';
+      sizeSelect.innerHTML = html;
+    }
+
+    // When a size is picked, prefill the L x W x H (parsed from the size string where possible)
+    // and auto-fill Avg Dia Wt from the Wt/Pc lookup. User can still override.
+    function onSizeChange(sizeSelect) {
+      const row = sizeSelect.closest('tr');
+      const shapeSelect = row.querySelector('.d-shape');
+      const dimsManual = row.querySelector('.d-dims-manual');
+      const avgWtInput = row.querySelector('.d-avgwt');
+      const shape = shapeSelect.value;
+      const val = sizeSelect.value;
+
+      if (val === 'custom') {
+        dimsManual.classList.remove('hidden');
+        row.querySelector('.d-len').value = '';
+        row.querySelector('.d-wid').value = '';
+        row.querySelector('.d-hei').value = '';
+        return;
+      }
+      dimsManual.classList.add('hidden');
+
+      if (val === '') return;
+
+      const entries = shapeSizeData[shape] || [];
+      const entry = entries[parseInt(val, 10)];
+      if (!entry) return;
+
+      // Parse dims out of the size string, e.g. "4.00 x 2.50 mm" or "2.5 mm" or "1.50 x 1.25 x 1.00 mm"
+      const nums = (entry.size.match(/[\d.]+/g) || []).map(Number);
+      row.querySelector('.d-len').value = nums[0] !== undefined ? nums[0].toFixed(2) : '';
+      row.querySelector('.d-wid').value = nums[1] !== undefined ? nums[1].toFixed(2) : '';
+      row.querySelector('.d-hei').value = nums[2] !== undefined ? nums[2].toFixed(2) : '';
+
+      // Auto-fill Avg Dia Wt from the Wt/Pc column (still editable by the user)
+      if (entry.wt !== null && entry.wt !== undefined) {
+        avgWtInput.value = entry.wt.toFixed(4);
+      }
+      recalcTotals();
+    }
+
+    function removeRow(btn) { btn.closest('tr').remove(); recalcTotals(); }
+    function calcTotals() { recalcTotals(); }
+    function recalcTotals() {
+      let sumW = 0, sumQ = 0;
+      document.querySelectorAll('#diamondTableBody .d-row').forEach(row => {
+        let avg = parseFloat(row.querySelector('.d-avgwt').value) || 0;
+        let qty = parseFloat(row.querySelector('.d-qty').value) || 0;
+        let tot = avg * qty;
+        const totField = row.querySelector('.d-tot');
+        totField.value = tot > 0 ? tot.toFixed(3) : '';
+        sumQ += qty;
+        sumW += tot;
+      });
+      document.getElementById('sumWt').innerText = sumW.toFixed(3);
+      document.getElementById('sumQty').innerText = sumQ % 1 === 0 ? sumQ.toFixed(0) : sumQ;
+    }
+
+    // Reference Images: starts with 3 upload slots, "+ Add" appends more.
+    // Each slot is independent (its own file, own preview, own delete button).
+    function renderClientRefImages() {
+      const container = document.getElementById('clientRefContainer');
+      if (!container) return;
+      container.innerHTML = clientRefImages.map((img, idx) => `
+        <div class="w-40 h-40 border border-dashed border-blue-300 flex items-center justify-center relative group hover:bg-blue-50 transition-colors bg-white">
+          <span class="text-[10px] font-bold text-slate-500 absolute top-1 left-1 print-hidden z-20">Ref ${idx + 1}</span>
+          ${clientRefImages.length > 1 ? `<button type="button" onclick="deleteClientRefSlot(${img.id})" class="print-hidden absolute top-1 right-1 z-20 text-red-600 hover:text-red-800 font-bold text-sm bg-white rounded-full w-5 h-5 leading-none">x</button>` : ''}
+          ${img.dataUrl
+            ? `<img src="${img.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-1 bg-white cursor-zoom-in">`
+            : `<span class="text-xs text-slate-400 print-hidden">Upload Image</span>`}
+          <input type="file" accept="image/*" onchange="handleClientRefUpload(event, ${img.id})" class="print-hidden absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+        </div>
+      `).join('');
+    }
+
+    function addClientRefSlot() {
+      clientRefCounter++;
+      clientRefImages.push({ id: clientRefCounter, dataUrl: null });
+      renderClientRefImages();
+    }
+
+    function deleteClientRefSlot(id) {
+      if (clientRefImages.length <= 1) return;
+      clientRefImages = clientRefImages.filter(img => img.id !== id);
+      renderClientRefImages();
+    }
+
+    function handleClientRefUpload(event, id) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = function(e) {
+        const img = clientRefImages.find(i => i.id === id);
+        if (img) img.dataUrl = e.target.result;
+        renderClientRefImages();
+      };
+      r.readAsDataURL(file);
+    }
+
+    function extractTableData() {
+      let centerDetails = [], sideDetails = [], allDetails = [];
+      document.querySelectorAll('#diamondTableBody .d-row').forEach(row => {
+        let pos = row.querySelector('.d-pos').value;
+        let shape = row.querySelector('.d-shape').value || "";
+        let avgwt = row.querySelector('.d-avgwt').value || "";
+        let qty = row.querySelector('.d-qty').value || "";
+        let wt = row.querySelector('.d-tot').value || "";
+        let source = row.querySelector('.d-source').value || "";
+        
+        let l = row.querySelector('.d-len').value || "";
+        let w = row.querySelector('.d-wid').value || "";
+        let d = row.querySelector('.d-hei').value || "";
+        let mm = (l||w||d) ? `${l}x${w}x${d}` : "";
+        
+        if (shape || avgwt || mm) {
+           let baseString = `${shape} ${mm ? '('+mm+'mm)' : ''}`.trim().replace(/\s+/g, ' ');
+           let fullString = `${baseString} | Avg:${avgwt}ct | Qty:${qty} | ${wt}ct${source ? ' | Src:'+source : ''}`;
+           allDetails.push(fullString);
+           if (pos === 'Center') centerDetails.push(fullString);
+           if (pos === 'Side') sideDetails.push(fullString);
+        }
+      });
+      return { "StoneDetails": allDetails.join(' \n '), "Center Diam Details": centerDetails.join(' \n '), "Side Diam Details": sideDetails.join(' \n ') };
+    }
+
+    function getRawTableArray() {
+      let data = [];
+      document.querySelectorAll('#diamondTableBody .d-row').forEach(row => {
+        data.push({
+          Mode: row.dataset.rowMode || 'standard',
+          Pos: row.querySelector('.d-pos').value,
+          Stone: row.querySelector('.d-stone').value, 
+          Shape: row.querySelector('.d-shape').value, 
+          SizeIdx: row.querySelector('.d-size') ? row.querySelector('.d-size').value : '',
+          AvgWt: row.querySelector('.d-avgwt').value, 
+          L: row.querySelector('.d-len').value,
+          W: row.querySelector('.d-wid').value,
+          H: row.querySelector('.d-hei').value,
+          Qty: row.querySelector('.d-qty').value, 
+          Tot: row.querySelector('.d-tot').value, 
+          Set: row.querySelector('.d-set').value,
+          Source: row.querySelector('.d-source').value
+        });
+      });
+      return data;
+    }
+
+    // Computes the extra fields the Main File expects but the form doesn't store
+    // directly: combined metal type/color strings, total stone qty, and the
+    // distinct stone type/source/setting summaries. These are additive keys with
+    // leading underscores so they never collide with real form field names, and
+    // the backend maps them to the correct Main File columns.
+    function computeDerivedFields(data) {
+      const derived = {};
+
+      // Metal Type: preserve order exactly as entered, e.g. "18KT + PT" or
+      // "PT + 18KT" - order is meaningful and NOT normalized to match any
+      // fixed list, per confirmed business rule. Falls back to whichever
+      // single metal is filled in if only one is present.
+      const mt1 = (data['Metal Type 1'] || '').trim();
+      const mt2 = (data['Metal Type 2'] || '').trim();
+      derived['_METAL_TYPE_COMBINED'] = [mt1, mt2].filter(Boolean).join(' + ');
+
+      // Metal Color: first-letter-of-each-code concatenation, e.g.
+      // "RG" + "WG" -> "RW" (confirmed business rule). This is checked
+      // against the approved metalColors list before use - if the computed
+      // code isn't one of the approved values (e.g. an unusual pairing),
+      // fall back to Metal Col 1 alone rather than sending a value that
+      // would get rejected by the sheet's dropdown validation.
+      const mc1 = (data['Metal Col 1'] || '').trim();
+      const mc2 = (data['Metal Col 2'] || '').trim();
+      let combinedColor = '';
+      if (mc1 && mc2) {
+        const candidate = mc1.charAt(0).toUpperCase() + mc2.charAt(0).toUpperCase();
+        combinedColor = dropdownData.metalColors.includes(candidate) ? candidate : mc1;
+      } else {
+        combinedColor = mc1 || mc2;
+      }
+      derived['_METAL_COLOR_COMBINED'] = combinedColor;
+
+      // Stone-derived summaries from the raw rows.
+      const stones = Array.isArray(data._RAW_STONES) ? data._RAW_STONES : [];
+      let totalQty = 0;
+      const types = [], sources = [], settings = [];
+      stones.forEach(s => {
+        const q = parseFloat(s.Qty);
+        if (!isNaN(q)) totalQty += q;
+        if (s.Stone && !types.includes(s.Stone)) types.push(s.Stone);
+        if (s.Source && !sources.includes(s.Source)) sources.push(s.Source);
+        if (s.Set && !settings.includes(s.Set)) settings.push(s.Set);
+      });
+
+      derived['_STONE_QTY']      = totalQty > 0 ? (totalQty % 1 === 0 ? totalQty.toFixed(0) : String(totalQty)) : '';
+      derived['_STONE_TYPES']    = types.join(', ');
+      derived['_STONE_SOURCES']  = sources.join(', ');
+      derived['_STONE_SETTINGS'] = settings.join(', ');
+
+      return derived;
+    }
+
+    async function submitForm() {
+      const form = document.getElementById('cadForm');
+      if (!form.checkValidity()) { form.reportValidity(); return; }
+
+      const loader = document.getElementById('loader-overlay');
+      const submitBtn = document.getElementById('submitBtn');
+      loader.classList.remove('hidden');
+      document.getElementById('loader-text').innerText = "Generating Enterprise PDF & saving to cloud...";
+      submitBtn.disabled = true;
+
+      const dataObj = {};
+      new FormData(form).forEach((val, key) => dataObj[key] = val);
+      Object.assign(dataObj, extractTableData());
+      dataObj._RAW_STONES = getRawTableArray();
+      dataObj._VERSIONS = imageVersions.map(v => ({ id: v.id, dataUrl: v.dataUrl, locked: v.locked }));
+      dataObj._CLIENT_REF_IMAGES = clientRefImages.map(img => ({ id: img.id, dataUrl: img.dataUrl }));
+      Object.assign(dataObj, computeDerivedFields(dataObj));
+
+      const exactJobNumber = dataObj['JobNo'] || dataObj['ItemNo'] || "JobCard";
+      
+      let pdfBase64Data = "";
+      try {
+        // Now using our new Native jsPDF engine!
+        pdfBase64Data = await generateEnterprisePDF(exactJobNumber, dataObj);
+      } catch (err) {
+        alert("❌ PDF generation failed.");
+        console.error(err);
+        loader.classList.add('hidden');
+        submitBtn.disabled = false;
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          loader.classList.add('hidden');
+          submitBtn.disabled = false;
+          if (res.success) {
+            let msg = '✅ Submission complete.\n\n';
+            msg += `- Backup (JWY OS): ${res.jwyStatus || 'saved'}\n`;
+            msg += `- Main File: ${res.mainStatus || 'n/a'}\n`;
+            if (res.driveStatus) msg += `- PDF: ${res.driveStatus}`;
+            alert(msg);
+            form.reset();
+            document.querySelectorAll('#diamondTableBody input, #diamondTableBody select').forEach(inp => inp.value = '');
+            recalcTotals();
+            imageVersions = [
+              { id: 1, dataUrl: null, fileObj: null, locked: false },
+              { id: 2, dataUrl: null, fileObj: null, locked: false },
+              { id: 3, dataUrl: null, fileObj: null, locked: false }
+            ];
+            activeTabId = 1;
+            versionCounter = 3;
+            renderImageTabs();
+
+            clientRefImages = [
+              { id: 1, dataUrl: null },
+              { id: 2, dataUrl: null },
+              { id: 3, dataUrl: null }
+            ];
+            clientRefCounter = 3;
+            renderClientRefImages();
+          } else { alert("❌ Error saving: " + (res.error || 'unknown error')); }
+        })
+        .withFailureHandler(function(err) {
+          loader.classList.add('hidden');
+          submitBtn.disabled = false;
+          alert("❌ Server error: " + err.message);
+        })
+        .appendCadData(dataObj, pdfBase64Data); 
+    }
+
+    // ============================================================================
+    // NEW ENTERPRISE NATIVE PDF GENERATOR
+    // ============================================================================
+    async function generateEnterprisePDF(fileName, formData) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+      // Embed hidden data (required for the Load PDF feature)
+      doc.setFontSize(1); 
+      doc.setTextColor(255, 255, 255);
+      doc.text(`%%CAD_FORM_DATA_START%%${JSON.stringify(formData)}%%CAD_FORM_DATA_END%%`, 0, 0);
+
+      // ----- 1. HEADER BANNER (Main Details: Job No / Item No) -----
+      doc.setFillColor(30, 41, 59); // Slate-800 Dark Blue
+      doc.rect(0, 0, 210, 35, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.setFont("helvetica", "bold");
+      doc.text("CAD PRODUCTION CARD", 14, 22);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`JOB NO: ${formData['JobNo'] || 'N/A'}`, 150, 14);
+      doc.text(`ITEM NO: ${formData['ItemNo'] || 'N/A'}`, 150, 20);
+      doc.text(`SKU: ${formData['Style code'] || 'N/A'}`, 150, 26);
+      doc.text(`DATE: ${formData['Inquiry start date'] || 'N/A'}`, 150, 32);
+
+      // ----- 2. SUB DETAILS -----
+      // Ship Date, Vendor SKU, and Alloy Type are intentionally NOT printed -
+      // they're still captured on the form and still sync to the sheets, just
+      // excluded from this job card by request.
+      const fmt2 = (v) => { const n = parseFloat(v); return isNaN(n) ? '0.00' : n.toFixed(2); };
+      let currentY = 42;
+      doc.setFillColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("SUB DETAILS", 14, currentY);
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+      currentY += 6;
+
+      doc.autoTable({
+        startY: currentY,
+        theme: 'plain',
+        styles: { cellPadding: 3, fontSize: 9, lineColor: [203, 213, 225], lineWidth: 0.1 },
+        columnStyles: {
+           0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 },
+           1: { cellWidth: 60 },
+           2: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 },
+           3: { cellWidth: 60 }
+        },
+        body: [
+          ['Metal 1 / Color', `${formData['Metal Type 1']||'-'} / ${formData['Metal Col 1']||'-'}  (${fmt2(formData['Metal 1 Weight'])}g)`, 'Metal 2 / Color', `${formData['Metal Type 2']||'-'} / ${formData['Metal Col 2']||'-'}  (${fmt2(formData['Metal 2 Weight'])}g)`],
+          ['Stamping', formData['Stamping']||'-', 'Product Size', formData['Item Size']||'-'],
+          ['Rhodium', formData['Rhodium']||'-', 'Product Type', formData['ItemType']||'-'],
+          ['Sub Category', formData['Sub Category']||'-', 'Two Tone', formData['Two Tone']||'-'],
+          ['Ref No', formData['Ref no']||'-', 'CAD Designer', formData['CAD Designer']||'-']
+        ]
+      });
+      currentY = doc.lastAutoTable.finalY + 8;
+
+      // ----- 3. PRIMARY CAD IMAGE (the first version with content) -----
+      const allCadVersions = (formData._VERSIONS || []).filter(v => v.dataUrl);
+      const primaryCad = allCadVersions[0];
+      const additionalCadVersions = allCadVersions.slice(1);
+
+      if (primaryCad) {
+        doc.setFillColor(30, 41, 59);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text("CAD IMAGE", 14, currentY);
+        doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+        currentY += 6;
+        try {
+          const props = doc.getImageProperties(primaryCad.dataUrl);
+          const maxH = 90;
+          const r = Math.min(182 / props.width, maxH / props.height);
+          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, currentY, props.width * r, props.height * r, undefined, 'FAST');
+          currentY += props.height * r + 8;
+        } catch(e) { console.error("Primary CAD image render error", e); }
+      }
+
+      // ----- 4. STONE DETAILS -----
+      const fmtDim = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(2); };
+      const fmtWt4 = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(4); };
+      const fmtWt3 = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(3); };
+      let stoneData = formData._RAW_STONES.filter(s => s.Stone || s.Shape || s.Qty).map(s => [
+         s.Pos || '-', s.Stone || '-', s.Shape || '-',
+         (s.L || s.W || s.H) ? `${fmtDim(s.L)}x${fmtDim(s.W)}x${fmtDim(s.H)}` : '-',
+         fmtWt4(s.AvgWt || s.Sieve), s.Qty || '-', fmtWt3(s.Tot), s.Set || '-', s.Source || '-'
+      ]);
+
+      // Start a fresh page if there's not enough room left for the section title + a row or two.
+      if (currentY > 250) { doc.addPage(); currentY = 14; }
+
+      doc.setFillColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("STONE DETAILS", 14, currentY);
+      doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+      currentY += 6;
+
+      if (stoneData.length > 0) {
+          doc.autoTable({
+            startY: currentY,
+            theme: 'grid',
+            styles: { cellPadding: 1.5 },
+            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7, fontStyle: 'bold', halign: 'center' },
+            bodyStyles: { fontSize: 7, halign: 'center', textColor: [71, 85, 105] },
+            head: [['Pos', 'Stone', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
+            body: stoneData
+          });
+          currentY = doc.lastAutoTable.finalY + 6;
+      }
+
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`NO. OF STONES: ${document.getElementById('sumQty').innerText}     |     TOTAL STONE WEIGHT: ${document.getElementById('sumWt').innerText} ct`, 14, currentY);
+      currentY += 10;
+
+      // ----- 5. CLIENT INSTRUCTIONS -----
+      if (currentY > 260) { doc.addPage(); currentY = 14; }
+      doc.setFillColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("CLIENT INSTRUCTIONS", 14, currentY);
+      doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+      currentY += 6;
+
+      doc.setFillColor(241, 245, 249);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(14, currentY, 182, 22, 2, 2, 'FD');
+      doc.setTextColor(71, 85, 105);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      let splitNotes = doc.splitTextToSize(formData['Client Notes'] || 'No specific instructions provided.', 174);
+      doc.text(splitNotes, 18, currentY + 7);
+
+      // ----- 6. ADDITIONAL CAD IMAGES (any versions beyond the primary one) -----
+      const drawFullPageImage = (dataUrl, titleText) => {
+        doc.addPage();
+        doc.setFillColor(30, 41, 59);
+        doc.rect(0, 0, 210, 20, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(titleText, 14, 13);
+        try {
+          const props = doc.getImageProperties(dataUrl);
+          const r = Math.min(182 / props.width, 250 / props.height);
+          doc.addImage(dataUrl, dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, 30, props.width * r, props.height * r, undefined, 'FAST');
+        } catch(e) {}
+      };
+
+      additionalCadVersions.forEach((v, index) => {
+        drawFullPageImage(v.dataUrl, `ADDITIONAL CAD IMAGE ${index + 2}`);
+      });
+
+      // ----- 7. REFERENCE IMAGES (3 per row; overflow wraps to further pages) -----
+      const refImages = (formData._CLIENT_REF_IMAGES || []).filter(img => img && img.dataUrl);
+      if (refImages.length > 0) {
+        doc.addPage();
+        doc.setFillColor(30, 41, 59);
+        doc.rect(0, 0, 210, 20, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('REFERENCE IMAGES', 14, 13);
+
+        let rx = 14, ry = 30;
+        const boxW = 58, boxH = 70, gap = 4;
+        refImages.forEach((img, i) => {
+          const col = i % 3;
+          if (col === 0 && i > 0) { ry += boxH + 10; }
+          if (ry + boxH > 280) { doc.addPage(); ry = 20; }
+          const bx = 14 + col * (boxW + gap);
+          doc.setDrawColor(203, 213, 225);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
+          doc.text(`Reference Image ${i + 1}`, bx, ry - 2);
+          try {
+            const props = doc.getImageProperties(img.dataUrl);
+            const r = Math.min(boxW / props.width, boxH / props.height);
+            const drawW = props.width * r, drawH = props.height * r;
+            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', bx + (boxW - drawW) / 2, ry + (boxH - drawH) / 2, drawW, drawH, undefined, 'FAST');
+          } catch(e) {}
+        });
+      }
+
+      doc.save(fileName + ".pdf");
+      return doc.output('datauristring');
+    }
+    
+    // --- Load PDF feature: now supports BOTH our own form-generated PDFs
+    // AND external CAD intake PDFs (e.g. Diacrown job sheets) that embed the
+    // same %%CAD_FORM_DATA_START%%...%%CAD_FORM_DATA_END%% marker but with a
+    // different JSON schema. We detect which schema it is and adapt accordingly.
+    async function handlePdfUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const loader = document.getElementById('loader-overlay');
+        loader.classList.remove('hidden');
+        document.getElementById('loader-text').innerText = "Loading data from PDF...";
+        
+        try {
+            const reader = new FileReader();
+            reader.onload = async function() {
+                try {
+                    if(typeof pdfjsLib === 'undefined') { alert("PDF processor not ready. Please refresh."); return; }
+                    const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+
+                    // Search every page for the marker, not just page 1 - some source
+                    // systems may place it on a different page or split it across pages.
+                    let fullText = '';
+                    for (let pNum = 1; pNum <= pdf.numPages; pNum++) {
+                        const page = await pdf.getPage(pNum);
+                        const content = await page.getTextContent();
+                        fullText += content.items.map(i => i.str).join('') + '\n';
+                    }
+
+                    const match = fullText.match(/%%CAD_FORM_DATA_START%%(.*?)%%CAD_FORM_DATA_END%%/s);
+                    if (!match) { alert('❌ No CAD data marker found in this PDF.'); return; }
+
+                    let rawData;
+                    try {
+                        rawData = JSON.parse(match[1]);
+                    } catch (parseErr) {
+                        alert('❌ Found a data marker but could not parse it as JSON. The PDF may be from an unsupported source.');
+                        console.error(parseErr);
+                        return;
+                    }
+
+                    const schema = detectPdfSchema(rawData);
+                    if (schema === 'own') {
+                        populateForm(rawData);
+                        alert('✅ PDF data loaded successfully. Check the Version Tabs to see previously saved images.');
+                    } else if (schema === 'diacrown') {
+                        const { mapped } = mapDiacrownDataToForm(rawData);
+                        populateForm(mapped);
+                        alert(`✅ Loaded Diacrown CAD request ${rawData['Job #'] || ''}. Only fields matching existing dropdown options were filled in - please fill in the rest manually.`);
+                    } else {
+                        alert('❌ This PDF has a CAD data marker, but in a format this form doesn\'t recognize yet.');
+                    }
+                } catch (e) {
+                    alert("❌ Error parsing PDF file.");
+                    console.error(e);
+                } finally {
+                    loader.classList.add('hidden');
+                }
+            };
+            reader.onerror = function() {
+                alert("❌ Error reading file.");
+                loader.classList.add('hidden');
+            };
+            reader.readAsArrayBuffer(file);
+        } catch (e) { alert("❌ Error processing PDF file."); console.error(e); loader.classList.add('hidden'); }
+        event.target.value = null;
+    }
+
+    // Identifies which JSON schema the embedded marker data uses.
+    // 'own'      -> generated by THIS form (has our exact field names, e.g. "JobNo")
+    // 'diacrown' -> Diacrown's CAD intake job sheet format (has "Job #", "Gemstones", etc.)
+    // 'unknown'  -> some other / future source we don't have a mapping for yet
+    function detectPdfSchema(data) {
+        if (data && typeof data === 'object') {
+            if ('JobNo' in data || '_RAW_STONES' in data) return 'own';
+            if ('Job #' in data && 'Company' in data) return 'diacrown';
+        }
+        return 'unknown';
+    }
+
+    // Case-insensitive match of a raw external value against one of our dropdown
+    // option arrays. Tries exact match, then case-insensitive exact, then a known
+    // synonym table (for cases like "Platinum" -> "PT"). Deliberately does NOT do
+    // loose substring matching for short codes (e.g. "950" inside "PT 950") since
+    // that produces false positives across unrelated fields (platinum purity vs.
+    // a metal-color code that happens to also be "950"). Returns null if nothing
+    // fits confidently, so the caller leaves the field blank rather than guessing.
+    const METAL_SYNONYMS = {
+        'platinum': 'PT', 'plat': 'PT', 'pt': 'PT',
+        'white gold': 'WG', 'yellow gold': 'YG', 'rose gold': 'RG',
+        'silver': 'SILVER', 'sterling silver': 'SILVER', '925': '925',
+        'brass': 'BRASS'
+    };
+
+    function fuzzyMatchOption(rawValue, optionsArray) {
+        if (!rawValue || !optionsArray) return null;
+        const needle = rawValue.toString().trim();
+        if (!needle) return null;
+        const needleLower = needle.toLowerCase();
+
+        let hit = optionsArray.find(o => o === needle);
+        if (hit) return hit;
+
+        hit = optionsArray.find(o => o.toLowerCase() === needleLower);
+        if (hit) return hit;
+
+        const synonym = METAL_SYNONYMS[needleLower];
+        if (synonym) {
+            hit = optionsArray.find(o => o.toLowerCase() === synonym.toLowerCase());
+            if (hit) return hit;
+        }
+
+        return null;
+    }
+
+    // Maps Diacrown's CAD intake JSON schema onto this form's field names.
+    // STRICT MAPPING ONLY: a field is filled in only if its value can be matched
+    // to one of this form's existing dropdown options. Anything that can't be
+    // matched is left blank for manual entry - it is not guessed, not stuffed
+    // into Client Notes, and not surfaced in a warning. For gemstones specifically,
+    // if the Shape can't be matched to a known shape, that entire stone row is
+    // skipped rather than imported half-filled.
+    function mapDiacrownDataToForm(d) {
+        const out = {
+            JobNo: d['Job #'] || '',
+            'Inquiry start date': d['Job Date'] || '',
+            'Ship Date': d['Due Date'] || '',
+            'Item Size': d['Product Size'] || ''
+        };
+
+        // Dropdown-backed fields: only filled in on a confident match.
+        const tryMatch = (rawVal, optionsArray, fieldKey) => {
+            if (!rawVal) return;
+            const matched = fuzzyMatchOption(rawVal, optionsArray);
+            if (matched) out[fieldKey] = matched;
+        };
+
+        tryMatch(d['Product Type'], dropdownData.itemTypes, 'ItemType');
+        tryMatch(d['Metal Type'], dropdownData.metalTypes, 'Metal Type 1');
+        tryMatch(d['Metal Color'], dropdownData.metalColors, 'Metal Col 1');
+        tryMatch(d['Alloy'], dropdownData.alloyTypes, 'Alloy Type');
+        tryMatch(d['Rhodium'], dropdownData.rhodium, 'Rhodium');
+        tryMatch(d['Stamping Metal'], dropdownData.stamping, 'Stamping');
+
+        // Gemstones[] -> our _RAW_STONES row format. Only stones whose Shape
+        // matches one of our known shapes are imported; everything else is
+        // skipped so the team isn't left with half-mapped rows to untangle.
+        const rawStones = [];
+        if (Array.isArray(d['Gemstones'])) {
+            d['Gemstones'].forEach(g => {
+                const matchedShape = fuzzyMatchOption(g['Shape'], dropdownData.shapes);
+                if (!matchedShape) return; // skip this stone entirely
+
+                const matchedStone = fuzzyMatchOption(g['Type'], dropdownData.stoneTypes);
+                const sizeNums = (g['Size'] || '').match(/[\d.]+/g) || [];
+
+                rawStones.push({
+                    Mode: 'standard',
+                    Pos: 'Side',
+                    Stone: matchedStone || '',
+                    Shape: matchedShape,
+                    SizeIdx: '',
+                    AvgWt: g['CTW/Pc'] || '',
+                    L: sizeNums[0] || '',
+                    W: sizeNums[1] || sizeNums[0] || '',
+                    H: sizeNums[2] || '',
+                    Qty: g['Pcs'] || '',
+                    Tot: '',
+                    Set: '',
+                    Source: ''
+                });
+            });
+        }
+        out._RAW_STONES = rawStones;
+        out._VERSIONS = [];
+        out._CLIENT_REF_IMAGES = [];
+
+        return { mapped: out };
+    }
+
+
+    function populateForm(data) {
+        const form = document.getElementById('cadForm');
+        for (const k in data) {
+            const el = form.elements[k];
+            if (el) {
+                if(el.type === 'checkbox') el.checked = data[k];
+                else el.value = data[k];
+            }
+        }
+        
+        if(data._VERSIONS && data._VERSIONS.length > 0) {
+            imageVersions = data._VERSIONS;
+            imageVersions.forEach(v => { if(v.dataUrl) v.locked = true; });
+            activeTabId = imageVersions[imageVersions.length - 1].id;
+            versionCounter = Math.max(...imageVersions.map(v => v.id));
+            renderImageTabs();
+        }
+
+        if(data._CLIENT_REF_IMAGES && data._CLIENT_REF_IMAGES.length > 0) {
+            clientRefImages = data._CLIENT_REF_IMAGES;
+            clientRefCounter = Math.max(...clientRefImages.map(i => i.id));
+            renderClientRefImages();
+        }
+
+        const stoneTbody = document.getElementById('diamondTableBody');
+        stoneTbody.innerHTML = '';
+        if (data._RAW_STONES && data._RAW_STONES.length > 0) {
+            data._RAW_STONES.forEach(s => {
+                const rowMode = s.Mode === 'custom' ? 'custom' : 'standard';
+                addDiamondRow(rowMode);
+                const row = stoneTbody.lastElementChild;
+                if(s.Pos) row.querySelector('.d-pos').value = s.Pos;
+                if(s.Stone) row.querySelector('.d-stone').value = s.Stone;
+                if(s.Shape) {
+                  row.querySelector('.d-shape').value = s.Shape;
+                  if (rowMode === 'standard') onShapeChange(row.querySelector('.d-shape'));
+                }
+                if(rowMode === 'standard' && s.SizeIdx !== undefined && s.SizeIdx !== '' && row.querySelector('.d-size')) {
+                  row.querySelector('.d-size').value = s.SizeIdx;
+                }
+                const setIfNumeric = (selector, rawVal, places) => {
+                  const n = parseFloat(rawVal);
+                  if (rawVal !== '' && rawVal !== undefined && rawVal !== null && !isNaN(n)) {
+                    row.querySelector(selector).value = n.toFixed(places);
+                  }
+                };
+                setIfNumeric('.d-avgwt', s.AvgWt || s.Sieve, 4);
+                setIfNumeric('.d-len', s.L, 2);
+                setIfNumeric('.d-wid', s.W, 2);
+                setIfNumeric('.d-hei', s.H, 2);
+                if(s.Qty) row.querySelector('.d-qty').value = s.Qty;
+                setIfNumeric('.d-tot', s.Tot, 3);
+                if(s.Set) row.querySelector('.d-set').value = s.Set;
+                if(s.Source) row.querySelector('.d-source').value = s.Source;
+                // If dims were saved manually (custom size or shape without size table), show them
+                if(rowMode === 'standard' && (s.L || s.W || s.H) && row.querySelector('.d-dims-manual')) {
+                  row.querySelector('.d-dims-manual').classList.remove('hidden');
+                }
+            });
+            recalcTotals();
+        } else {
+            for(let i=0; i<5; i++) addDiamondRow('standard');
+        }
+    }
+  </script>
+
+</body>
+</html>
