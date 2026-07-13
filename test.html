@@ -86,7 +86,6 @@
 
         <div class="flex flex-col md:flex-row border-t border-black">
           <div class="w-full md:w-2/3 p-4 flex flex-col border-r border-black bg-white min-h-[400px]">
-             <div id="tabs-container" class="flex flex-wrap overflow-x-auto border-b border-blue-400 mb-2 print-hidden"></div>
              <div id="tab-content-container" class="flex-grow relative border-2 border-dashed border-blue-300 p-2 flex flex-col items-center justify-center group hover:bg-blue-50 transition-colors print-hidden"></div>
              <img id="pdfImgMain" class="hidden print-block max-h-96 w-full object-contain mx-auto mt-2">
           </div>
@@ -219,12 +218,9 @@
   <script>
     const CAD_LOCK_PASSWORD = "admin"; 
     let imageVersions = [
-      { id: 1, dataUrl: null, fileObj: null, locked: false },
-      { id: 2, dataUrl: null, fileObj: null, locked: false },
-      { id: 3, dataUrl: null, fileObj: null, locked: false }
+      { id: 1, dataUrl: null, fileObj: null, locked: false }
     ];
-    let activeTabId = 1;
-    let versionCounter = 3;
+    const CAD_IMAGE_ID = 1;
     let clientRefImages = [
       { id: 1, dataUrl: null },
       { id: 2, dataUrl: null },
@@ -237,7 +233,7 @@
         itemTypes: ["Ring", "Earring", "Studs", "Bracelet", "Armband", "Pendant", "Necklace", "Charm", "Bangle", "Nose stud", "Other", "Head", "Chain", "Clasp", "Earring Jackets", "Loop"],
         subCategories: ["Bridal", "Fashion", "Eternity", "Solitaire"],
         stamping: ["9K", "10K", "14K", "18K", "22K", "PT", "375", "417", "585", "750", "916", "950", "BRCZ", "AGCZ", "SS925", "AY", "AYCZ", "PT950", "9ct", "18ct", "14ct"],
-        stoneTypes: ["Mined", "LGD", "Mined+LGD", "Mined Semi", "LGD Semi", "Mount", "Color", "Color Semi", "Color+Mined", "Color+Mined Semi", "Color+LGD", "Color+LGD Semi", "Zircon", "Zircon Semi", "Mined+LGD Semi", "Color+LGD+CZ", "CZ", "Plain", "Mined+Lab+Colour"],
+        stoneTypes: ["Mined", "Lab grown", "CZ", "Mount", "Semi-Mount", "Ametrine", "Amethyst", "Aquamarine", "Citrine", "Emerald", "Garnet", "Hessonite Garnet", "Iolite", "Morganite", "Peridot", "Ruby", "Sapphire", "Spinel", "Tanzanite", "Topaz", "Tourmaline", "Zircon"],
         // mainColors/mainClarities removed along with the Color/Clarity columns.
         alloyTypes: ["Standard", "Palladium", "Nickel Free", "Platinum", "SS925", "Gold Plated", "Nickel Safe"],
         shapes: ["Round", "Baguette", "Carre", "Emerald", "Heart", "Marquise", "Oval", "Pear", "Princess", "Radiant", "Single Cut", "Sq. Cushion", "Sq. Emerald", "Tappered Bagguette", "Triangle", "Trilliant"],
@@ -313,18 +309,8 @@
     setTimeout(safeInitApp, 300);
 
     function renderImageTabs() {
-      const tabsContainer = document.getElementById('tabs-container');
       const contentContainer = document.getElementById('tab-content-container');
-      let tabsHtml = '';
-      imageVersions.forEach((v, index) => {
-        let isActive = v.id === activeTabId;
-        let bgClass = isActive ? 'bg-blue-200 border-b-0 text-blue-900 z-10' : 'bg-slate-50 text-slate-500 hover:bg-blue-100 border-b';
-        tabsHtml += `<button type="button" onclick="setActiveTab(${v.id})" class="px-4 py-2 text-sm font-bold border border-blue-400 rounded-t-md ${bgClass} -mb-[1px] mr-1 transition-colors">V${index + 1}</button>`;
-      });
-      tabsHtml += `<button type="button" onclick="addNewVersion()" class="px-3 py-2 text-sm font-bold text-blue-600 hover:bg-blue-100 border-b border-blue-400 -mb-[1px] transition-colors">+ Add Tab</button>`;
-      tabsContainer.innerHTML = tabsHtml;
-
-      let activeV = imageVersions.find(v => v.id === activeTabId);
+      const activeV = imageVersions[0];
       if (activeV.locked) {
         contentContainer.innerHTML = `
           <div class="absolute top-2 right-2 flex gap-2 z-20 print-hidden">
@@ -336,10 +322,10 @@
         contentContainer.innerHTML = `
           <div class="absolute top-2 right-2 flex gap-2 z-20 print-hidden">
             ${activeV.dataUrl ? `<button type="button" onclick="lockVersion(${activeV.id})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded shadow hover:bg-blue-700">🔓 Lock</button>` : ''}
-            ${imageVersions.length > 1 ? `<button type="button" onclick="deleteVersion(${activeV.id})" class="text-xs bg-red-600 text-white px-3 py-1 rounded shadow hover:bg-red-700">🗑️ Delete</button>` : ''}
+            ${activeV.dataUrl ? `<button type="button" onclick="clearCadImage()" class="text-xs bg-red-600 text-white px-3 py-1 rounded shadow hover:bg-red-700">🗑️ Remove</button>` : ''}
           </div>
           <input type="file" onchange="handleVersionUpload(event, ${activeV.id})" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-          ${activeV.dataUrl ? `<img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in z-20">` : `<div class="text-center pointer-events-none"><span class="text-blue-400 font-bold block mb-2 text-lg">Tab ${imageVersions.indexOf(activeV) + 1}</span><span class="text-xs text-slate-500 border border-slate-300 bg-slate-100 px-3 py-2 rounded shadow-sm">Choose File</span></div>`}
+          ${activeV.dataUrl ? `<img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in z-20">` : `<div class="text-center pointer-events-none"><span class="text-blue-400 font-bold block mb-2 text-lg">CAD Image</span><span class="text-xs text-slate-500 border border-slate-300 bg-slate-100 px-3 py-2 rounded shadow-sm">Choose File</span></div>`}
         `;
       }
       const pdfImg = document.getElementById('pdfImgMain');
@@ -347,10 +333,15 @@
       else { pdfImg.classList.add('hidden'); }
     }
 
-    function setActiveTab(id) { activeTabId = id; renderImageTabs(); }
-    function addNewVersion() { versionCounter++; const newV = { id: versionCounter, dataUrl: null, fileObj: null, locked: false }; imageVersions.push(newV); activeTabId = newV.id; renderImageTabs(); }
-    function deleteVersion(id) { if(confirm("Delete this tab?")) { imageVersions = imageVersions.filter(v => v.id !== id); activeTabId = imageVersions[imageVersions.length - 1].id; renderImageTabs(); } }
-    
+    function clearCadImage() {
+      if (!confirm("Remove the CAD image?")) return;
+      const v = imageVersions[0];
+      v.dataUrl = null;
+      v.fileObj = null;
+      v.locked = false;
+      renderImageTabs();
+    }
+
     function handleVersionUpload(event, id) {
       const file = event.target.files[0];
       if (file) {
@@ -367,7 +358,7 @@
 
     function lockVersion(id) { let v = imageVersions.find(v => v.id === id); v.locked = true; renderImageTabs(); }
     function unlockVersion(id) {
-      let pwd = prompt("Enter password to unlock this tab:");
+      let pwd = prompt("Enter password to unlock the CAD image:");
       if(pwd === CAD_LOCK_PASSWORD) { let v = imageVersions.find(v => v.id === id); v.locked = false; renderImageTabs(); } 
       else if (pwd !== null) { alert("❌ Incorrect password."); }
     }
@@ -778,7 +769,7 @@
         currentY += 6;
         try {
           const props = doc.getImageProperties(primaryCad.dataUrl);
-          const maxH = 90;
+          const maxH = 130;
           const r = Math.min(182 / props.width, maxH / props.height);
           doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, currentY, props.width * r, props.height * r, undefined, 'FAST');
           currentY += props.height * r + 8;
@@ -873,15 +864,15 @@
         doc.text('REFERENCE IMAGES', 14, 13);
 
         let ry = 30;
-        const boxW = 58, boxH = 70, gap = 4;
+        const boxW = 88, boxH = 100, gap = 6;
         refImages.forEach((img, i) => {
-          const col = i % 3;
-          if (col === 0 && i > 0) { ry += boxH + 10; }
-          if (ry + boxH > 280) { doc.addPage(); ry = 20; }
+          const col = i % 2;
+          if (col === 0 && i > 0) { ry += boxH + 12; }
+          if (ry + boxH > 270) { doc.addPage(); ry = 20; }
           const bx = 14 + col * (boxW + gap);
           doc.setDrawColor(203, 213, 225);
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
-          doc.text(`Reference Image ${i + 1}`, bx, ry - 2);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105);
+          doc.text(`Reference Image ${i + 1}`, bx, ry - 3);
           try {
             const props = doc.getImageProperties(img.dataUrl);
             const r = Math.min(boxW / props.width, boxH / props.height);
@@ -1057,10 +1048,11 @@
         }
         
         if(data._VERSIONS && data._VERSIONS.length > 0) {
-            imageVersions = data._VERSIONS;
-            imageVersions.forEach(v => { if(v.dataUrl) v.locked = true; });
-            activeTabId = imageVersions[imageVersions.length - 1].id;
-            versionCounter = Math.max(...imageVersions.map(v => v.id));
+            // Only one CAD image slot now — take the first entry with a
+            // dataUrl (older multi-image JSON/PDF exports may still have
+            // several; we only keep the first one to match the current form).
+            const firstWithImage = data._VERSIONS.find(v => v.dataUrl) || data._VERSIONS[0];
+            imageVersions = [{ id: 1, dataUrl: firstWithImage.dataUrl || null, fileObj: null, locked: !!firstWithImage.dataUrl }];
             renderImageTabs();
         }
 
