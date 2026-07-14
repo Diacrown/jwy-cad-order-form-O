@@ -233,11 +233,11 @@
         itemTypes: ["Ring", "Earring", "Studs", "Bracelet", "Armband", "Pendant", "Necklace", "Charm", "Bangle", "Nose stud", "Other", "Head", "Chain", "Clasp", "Earring Jackets", "Loop"],
         subCategories: ["Bridal", "Fashion", "Eternity", "Solitaire"],
         stamping: ["9K", "10K", "14K", "18K", "22K", "PT", "375", "417", "585", "750", "916", "950", "BRCZ", "AGCZ", "SS925", "AY", "AYCZ", "PT950", "9ct", "18ct", "14ct"],
-        stoneTypes: ["Mined", "Lab grown", "CZ", "Mount", "Semi-Mount", "Pearl" , "Cabachon", "Opal" , "Ametrine", "Amethyst", "Aquamarine", "Citrine", "Emerald", "Garnet", "Hessonite Garnet", "Iolite", "Morganite", "Peridot", "Ruby", "Sapphire", "Spinel", "Tanzanite", "Topaz", "Tourmaline", "Zircon"],
+        stoneTypes: ["Mined", "Lab grown", "CZ", "Mount", "Semi-Mount", "Ametrine", "Amethyst", "Aquamarine", "Citrine", "Emerald", "Garnet", "Hessonite Garnet", "Iolite", "Morganite", "Peridot", "Ruby", "Sapphire", "Spinel", "Tanzanite", "Topaz", "Tourmaline", "Zircon"],
         // mainColors/mainClarities removed along with the Color/Clarity columns.
         alloyTypes: ["Standard", "Palladium", "Nickel Free", "Platinum", "SS925", "Gold Plated", "Nickel Safe"],
-        shapes: ["Round", "Asscher" , "Baguette", "Carre", "Emerald", "Half Moon" ,"Hexagon", "Heart", "Kite" , "Long Cushion", "Marquise", "Oval", "Pear", "Princess", "Radiant", "Single Cut", "Sq. Cushion", "Sq. Emerald", "Tappered Bagguette", "Triangle", "Trilliant"],
-        settings: ["Prong", "Pressure", "Micro pave", "Micro prong", "Pave", "Channel", "Bezel", "French pave", "Plate prong", "Flush", "Pin set"],
+        shapes: ["Round", "Baguette", "Carre", "Emerald", "Heart", "Marquise", "Oval", "Pear", "Princess", "Radiant", "Single Cut", "Sq. Cushion", "Sq. Emerald", "Tappered Bagguette", "Triangle", "Trilliant"],
+        settings: ["Prong", "Micro pave", "Micro prong", "Pave", "Channel", "Bezel", "French pave", "Plate prong", "Flush", "Pin set"],
         diamondSources: ["HO", "Customer"],
         // Updated from the master alloy costing table (bifurcated 'Metal' values).
         metalTypes: ["Wax", "Brass", "AG925", "AG935", "PT600", "PT900", "PT950", "9KT", "10KT", "14KT", "18KT", "22KT", "24KT"],
@@ -318,14 +318,26 @@
           </div>
           <img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in">
         `;
-      } else {
+      } else if (activeV.dataUrl) {
+        // Image already set: file input stays available via an explicit
+        // "Change" button (not an invisible full-cover overlay), since the
+        // <img> sits visually on top and would otherwise block direct clicks
+        // to a hidden file input underneath it.
         contentContainer.innerHTML = `
           <div class="absolute top-2 right-2 flex gap-2 z-20 print-hidden">
-            ${activeV.dataUrl ? `<button type="button" onclick="lockVersion(${activeV.id})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded shadow hover:bg-blue-700">🔓 Lock</button>` : ''}
-            ${activeV.dataUrl ? `<button type="button" onclick="clearCadImage()" class="text-xs bg-red-600 text-white px-3 py-1 rounded shadow hover:bg-red-700">🗑️ Remove</button>` : ''}
+            <label class="text-xs bg-slate-600 text-white px-3 py-1 rounded shadow hover:bg-slate-700 cursor-pointer">
+              🔄 Change
+              <input type="file" onchange="handleVersionUpload(event, ${activeV.id})" accept="image/*" class="hidden">
+            </label>
+            <button type="button" onclick="lockVersion(${activeV.id})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded shadow hover:bg-blue-700">🔓 Lock</button>
+            <button type="button" onclick="clearCadImage()" class="text-xs bg-red-600 text-white px-3 py-1 rounded shadow hover:bg-red-700">🗑️ Remove</button>
           </div>
+          <img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in z-10">
+        `;
+      } else {
+        contentContainer.innerHTML = `
           <input type="file" onchange="handleVersionUpload(event, ${activeV.id})" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-          ${activeV.dataUrl ? `<img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in z-20">` : `<div class="text-center pointer-events-none"><span class="text-blue-400 font-bold block mb-2 text-lg">CAD Image</span><span class="text-xs text-slate-500 border border-slate-300 bg-slate-100 px-3 py-2 rounded shadow-sm">Choose File</span></div>`}
+          <div class="text-center pointer-events-none"><span class="text-blue-400 font-bold block mb-2 text-lg">CAD Image</span><span class="text-xs text-slate-500 border border-slate-300 bg-slate-100 px-3 py-2 rounded shadow-sm">Choose File</span></div>
         `;
       }
       const pdfImg = document.getElementById('pdfImgMain');
@@ -536,9 +548,14 @@
           <span class="text-[10px] font-bold text-slate-500 absolute top-1 left-1 print-hidden z-20">Ref ${idx + 1}</span>
           ${clientRefImages.length > 1 ? `<button type="button" onclick="deleteClientRefSlot(${img.id})" class="print-hidden absolute top-1 right-1 z-20 text-red-600 hover:text-red-800 font-bold text-sm bg-white rounded-full w-5 h-5 leading-none">x</button>` : ''}
           ${img.dataUrl
-            ? `<img src="${img.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-1 bg-white cursor-zoom-in">`
+            ? `<img src="${img.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-1 bg-white cursor-zoom-in z-10">`
             : `<span class="text-xs text-slate-400 print-hidden">Upload Image</span>`}
-          <input type="file" accept="image/*" onchange="handleClientRefUpload(event, ${img.id})" class="print-hidden absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+          ${img.dataUrl
+            ? `<label class="print-hidden absolute bottom-1 left-1 right-1 z-20 text-[10px] font-bold bg-slate-700/90 text-white text-center py-1 rounded cursor-pointer hover:bg-slate-800">
+                 🔄 Change
+                 <input type="file" accept="image/*" onchange="handleClientRefUpload(event, ${img.id})" class="hidden">
+               </label>`
+            : `<input type="file" accept="image/*" onchange="handleClientRefUpload(event, ${img.id})" class="print-hidden absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">`}
         </div>
       `).join('');
     }
