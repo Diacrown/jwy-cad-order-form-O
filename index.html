@@ -71,7 +71,7 @@
             </td>
             <td class="w-[20%] font-black-strong bg-blue-50">
               <span class="block text-[10px] text-slate-500 font-normal">SKU:</span>
-              <input type="text" name="Style code" required class="font-bold text-sm">
+              <input type="text" name="Style code" class="font-bold text-sm">
             </td>
             <td class="w-[20%] font-black-strong">
               <span class="block text-[10px] text-slate-500 font-normal">Request Date:</span>
@@ -86,7 +86,6 @@
 
         <div class="flex flex-col md:flex-row border-t border-black">
           <div class="w-full md:w-2/3 p-4 flex flex-col border-r border-black bg-white min-h-[400px]">
-             <div id="tabs-container" class="flex flex-wrap overflow-x-auto border-b border-blue-400 mb-2 print-hidden"></div>
              <div id="tab-content-container" class="flex-grow relative border-2 border-dashed border-blue-300 p-2 flex flex-col items-center justify-center group hover:bg-blue-50 transition-colors print-hidden"></div>
              <img id="pdfImgMain" class="hidden print-block max-h-96 w-full object-contain mx-auto mt-2">
           </div>
@@ -210,7 +209,7 @@
 
       <div class="pt-6 flex justify-end print-hidden">
         <button type="button" id="submitBtn" onclick="submitForm()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-xl shadow-lg cursor-pointer transition-all text-lg">
-          🚀 Download PDF
+          🚀 Download PDF + Data
         </button>
       </div>
     </form>
@@ -219,12 +218,9 @@
   <script>
     const CAD_LOCK_PASSWORD = "admin"; 
     let imageVersions = [
-      { id: 1, dataUrl: null, fileObj: null, locked: false },
-      { id: 2, dataUrl: null, fileObj: null, locked: false },
-      { id: 3, dataUrl: null, fileObj: null, locked: false }
+      { id: 1, dataUrl: null, fileObj: null, locked: false }
     ];
-    let activeTabId = 1;
-    let versionCounter = 3;
+    const CAD_IMAGE_ID = 1;
     let clientRefImages = [
       { id: 1, dataUrl: null },
       { id: 2, dataUrl: null },
@@ -237,7 +233,7 @@
         itemTypes: ["Ring", "Earring", "Studs", "Bracelet", "Armband", "Pendant", "Necklace", "Charm", "Bangle", "Nose stud", "Other", "Head", "Chain", "Clasp", "Earring Jackets", "Loop"],
         subCategories: ["Bridal", "Fashion", "Eternity", "Solitaire"],
         stamping: ["9K", "10K", "14K", "18K", "22K", "PT", "375", "417", "585", "750", "916", "950", "BRCZ", "AGCZ", "SS925", "AY", "AYCZ", "PT950", "9ct", "18ct", "14ct"],
-        stoneTypes: ["Mined", "LGD", "Mined+LGD", "Mined Semi", "LGD Semi", "Mount", "Color", "Color Semi", "Color+Mined", "Color+Mined Semi", "Color+LGD", "Color+LGD Semi", "Zircon", "Zircon Semi", "Mined+LGD Semi", "Color+LGD+CZ", "CZ", "Plain", "Mined+Lab+Colour"],
+        stoneTypes: ["Mined", "Lab grown", "CZ", "Mount", "Semi-Mount", "Ametrine", "Amethyst", "Aquamarine", "Citrine", "Emerald", "Garnet", "Hessonite Garnet", "Iolite", "Morganite", "Peridot", "Ruby", "Sapphire", "Spinel", "Tanzanite", "Topaz", "Tourmaline", "Zircon"],
         // mainColors/mainClarities removed along with the Color/Clarity columns.
         alloyTypes: ["Standard", "Palladium", "Nickel Free", "Platinum", "SS925", "Gold Plated", "Nickel Safe"],
         shapes: ["Round", "Baguette", "Carre", "Emerald", "Heart", "Marquise", "Oval", "Pear", "Princess", "Radiant", "Single Cut", "Sq. Cushion", "Sq. Emerald", "Tappered Bagguette", "Triangle", "Trilliant"],
@@ -293,8 +289,6 @@
         document.getElementById('load-pdf-btn').addEventListener('click', () => document.getElementById('pdf-upload').click());
         document.getElementById('pdf-upload').addEventListener('change', handlePdfUpload);
       } catch (initErr) {
-        // Surface this on-page too, not just in DevTools console — makes any
-        // future init failure immediately visible without needing F12.
         console.error('initApp failed:', initErr);
         const banner = document.createElement('div');
         banner.style.cssText = 'background:#dc2626;color:#fff;padding:12px;font-weight:bold;text-align:center;position:fixed;top:0;left:0;right:0;z-index:99999;';
@@ -303,12 +297,6 @@
       }
     }
 
-    // Belt-and-suspenders init: try immediately, retry on DOMContentLoaded,
-    // retry again on window.load, and retry once more after a short delay.
-    // A guard flag ensures initApp() only actually runs once no matter how
-    // many of these fire. This is defensive against any host environment
-    // (Apps Script's sandboxed iframe, odd caching, etc.) where a single
-    // readyState check might not be reliable.
     function safeInitApp() {
       if (window.__cadFormInitDone) return;
       if (!document.getElementById('diamondTableBody')) return;
@@ -321,18 +309,8 @@
     setTimeout(safeInitApp, 300);
 
     function renderImageTabs() {
-      const tabsContainer = document.getElementById('tabs-container');
       const contentContainer = document.getElementById('tab-content-container');
-      let tabsHtml = '';
-      imageVersions.forEach((v, index) => {
-        let isActive = v.id === activeTabId;
-        let bgClass = isActive ? 'bg-blue-200 border-b-0 text-blue-900 z-10' : 'bg-slate-50 text-slate-500 hover:bg-blue-100 border-b';
-        tabsHtml += `<button type="button" onclick="setActiveTab(${v.id})" class="px-4 py-2 text-sm font-bold border border-blue-400 rounded-t-md ${bgClass} -mb-[1px] mr-1 transition-colors">V${index + 1}</button>`;
-      });
-      tabsHtml += `<button type="button" onclick="addNewVersion()" class="px-3 py-2 text-sm font-bold text-blue-600 hover:bg-blue-100 border-b border-blue-400 -mb-[1px] transition-colors">+ Add Version</button>`;
-      tabsContainer.innerHTML = tabsHtml;
-
-      let activeV = imageVersions.find(v => v.id === activeTabId);
+      const activeV = imageVersions[0];
       if (activeV.locked) {
         contentContainer.innerHTML = `
           <div class="absolute top-2 right-2 flex gap-2 z-20 print-hidden">
@@ -344,10 +322,10 @@
         contentContainer.innerHTML = `
           <div class="absolute top-2 right-2 flex gap-2 z-20 print-hidden">
             ${activeV.dataUrl ? `<button type="button" onclick="lockVersion(${activeV.id})" class="text-xs bg-blue-600 text-white px-3 py-1 rounded shadow hover:bg-blue-700">🔓 Lock</button>` : ''}
-            ${imageVersions.length > 1 ? `<button type="button" onclick="deleteVersion(${activeV.id})" class="text-xs bg-red-600 text-white px-3 py-1 rounded shadow hover:bg-red-700">🗑️ Delete</button>` : ''}
+            ${activeV.dataUrl ? `<button type="button" onclick="clearCadImage()" class="text-xs bg-red-600 text-white px-3 py-1 rounded shadow hover:bg-red-700">🗑️ Remove</button>` : ''}
           </div>
           <input type="file" onchange="handleVersionUpload(event, ${activeV.id})" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-          ${activeV.dataUrl ? `<img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in z-20">` : `<div class="text-center pointer-events-none"><span class="text-blue-400 font-bold block mb-2 text-lg">CAD Version ${imageVersions.indexOf(activeV) + 1}</span><span class="text-xs text-slate-500 border border-slate-300 bg-slate-100 px-3 py-2 rounded shadow-sm">Choose File</span></div>`}
+          ${activeV.dataUrl ? `<img src="${activeV.dataUrl}" onclick="openModal(this.src)" class="absolute inset-0 w-full h-full object-contain p-2 bg-white cursor-zoom-in z-20">` : `<div class="text-center pointer-events-none"><span class="text-blue-400 font-bold block mb-2 text-lg">CAD Image</span><span class="text-xs text-slate-500 border border-slate-300 bg-slate-100 px-3 py-2 rounded shadow-sm">Choose File</span></div>`}
         `;
       }
       const pdfImg = document.getElementById('pdfImgMain');
@@ -355,10 +333,15 @@
       else { pdfImg.classList.add('hidden'); }
     }
 
-    function setActiveTab(id) { activeTabId = id; renderImageTabs(); }
-    function addNewVersion() { versionCounter++; const newV = { id: versionCounter, dataUrl: null, fileObj: null, locked: false }; imageVersions.push(newV); activeTabId = newV.id; renderImageTabs(); }
-    function deleteVersion(id) { if(confirm("Delete this CAD version?")) { imageVersions = imageVersions.filter(v => v.id !== id); activeTabId = imageVersions[imageVersions.length - 1].id; renderImageTabs(); } }
-    
+    function clearCadImage() {
+      if (!confirm("Remove the CAD image?")) return;
+      const v = imageVersions[0];
+      v.dataUrl = null;
+      v.fileObj = null;
+      v.locked = false;
+      renderImageTabs();
+    }
+
     function handleVersionUpload(event, id) {
       const file = event.target.files[0];
       if (file) {
@@ -375,7 +358,7 @@
 
     function lockVersion(id) { let v = imageVersions.find(v => v.id === id); v.locked = true; renderImageTabs(); }
     function unlockVersion(id) {
-      let pwd = prompt("Enter password to unlock this CAD version:");
+      let pwd = prompt("Enter password to unlock the CAD image:");
       if(pwd === CAD_LOCK_PASSWORD) { let v = imageVersions.find(v => v.id === id); v.locked = false; renderImageTabs(); } 
       else if (pwd !== null) { alert("❌ Incorrect password."); }
     }
@@ -408,8 +391,6 @@
         </select></td>`;
 
       if (mode === 'custom') {
-        // CUSTOM ROW: every field except Position is free text, so any stone/shape/spec
-        // not covered by the standard dropdown lists can still be recorded.
         tr.innerHTML = `
           ${posCell}
           <td><input type="text" class="d-stone w-full text-center" placeholder="Type stone..."></td>
@@ -429,7 +410,6 @@
           <td class="border-r-0 print-hidden"><button type="button" class="remove-btn" onclick="removeRow(this)">❌</button></td>
         `;
       } else {
-        // STANDARD ROW: the original dropdown-driven fields with shape-based size/weight lookup.
         tr.innerHTML = `
           ${posCell}
           <td><select class="d-stone w-full text-center">${getDropdownOptions(dropdownData.stoneTypes, "Type")}</select></td>
@@ -456,9 +436,6 @@
       tbody.appendChild(tr);
     }
 
-    // Formats a numeric input field to a fixed number of decimal places on blur,
-    // so values always display consistently (e.g. 0.5 -> 0.50, 2 -> 2.00).
-    // Leaves the field blank if it has no value, so placeholders still work.
     function formatDecimal(input, places) {
       if (input.value === '' || input.value === null) return;
       const num = parseFloat(input.value);
@@ -466,9 +443,6 @@
       input.value = num.toFixed(places);
     }
 
-    // Populates the MM Size dropdown for a row based on the chosen Shape.
-    // Falls back to free-text L x W x H inputs if the shape has no size data (e.g. Single Cut)
-    // or if the user picks "Custom / Other Size".
     function onShapeChange(shapeSelect) {
       const row = shapeSelect.closest('tr');
       const sizeSelect = row.querySelector('.d-size');
@@ -476,7 +450,6 @@
       const shape = shapeSelect.value;
       const entries = shapeSizeData[shape] || [];
 
-      // Reset manual dims + avg wt whenever shape changes
       row.querySelector('.d-len').value = '';
       row.querySelector('.d-wid').value = '';
       row.querySelector('.d-hei').value = '';
@@ -489,7 +462,6 @@
       }
 
       if (entries.length === 0) {
-        // No size data for this shape (e.g. Single Cut) -> go straight to manual L x W x H
         sizeSelect.innerHTML = '';
         sizeSelect.classList.add('hidden');
         dimsManual.classList.remove('hidden');
@@ -505,8 +477,6 @@
       sizeSelect.innerHTML = html;
     }
 
-    // When a size is picked, prefill the L x W x H (parsed from the size string where possible)
-    // and auto-fill Avg Dia Wt from the Wt/Pc lookup. User can still override.
     function onSizeChange(sizeSelect) {
       const row = sizeSelect.closest('tr');
       const shapeSelect = row.querySelector('.d-shape');
@@ -530,13 +500,11 @@
       const entry = entries[parseInt(val, 10)];
       if (!entry) return;
 
-      // Parse dims out of the size string, e.g. "4.00 x 2.50 mm" or "2.5 mm" or "1.50 x 1.25 x 1.00 mm"
       const nums = (entry.size.match(/[\d.]+/g) || []).map(Number);
       row.querySelector('.d-len').value = nums[0] !== undefined ? nums[0].toFixed(2) : '';
       row.querySelector('.d-wid').value = nums[1] !== undefined ? nums[1].toFixed(2) : '';
       row.querySelector('.d-hei').value = nums[2] !== undefined ? nums[2].toFixed(2) : '';
 
-      // Auto-fill Avg Dia Wt from the Wt/Pc column (still editable by the user)
       if (entry.wt !== null && entry.wt !== undefined) {
         avgWtInput.value = entry.wt.toFixed(4);
       }
@@ -560,8 +528,6 @@
       document.getElementById('sumQty').innerText = sumQ % 1 === 0 ? sumQ.toFixed(0) : sumQ;
     }
 
-    // Reference Images: starts with 3 upload slots, "+ Add" appends more.
-    // Each slot is independent (its own file, own preview, own delete button).
     function renderClientRefImages() {
       const container = document.getElementById('clientRefContainer');
       if (!container) return;
@@ -649,28 +615,13 @@
       return data;
     }
 
-    // Computes the extra fields the Main File expects but the form doesn't store
-    // directly: combined metal type/color strings, total stone qty, and the
-    // distinct stone type/source/setting summaries. These are additive keys with
-    // leading underscores so they never collide with real form field names, and
-    // the backend maps them to the correct Main File columns.
     function computeDerivedFields(data) {
       const derived = {};
 
-      // Metal Type: preserve order exactly as entered, e.g. "18KT + PT" or
-      // "PT + 18KT" - order is meaningful and NOT normalized to match any
-      // fixed list, per confirmed business rule. Falls back to whichever
-      // single metal is filled in if only one is present.
       const mt1 = (data['Metal Type 1'] || '').trim();
       const mt2 = (data['Metal Type 2'] || '').trim();
       derived['_METAL_TYPE_COMBINED'] = [mt1, mt2].filter(Boolean).join(' + ');
 
-      // Metal Color: first-letter-of-each-code concatenation, e.g.
-      // "RG" + "WG" -> "RW" (confirmed business rule). This is checked
-      // against the approved metalColors list before use - if the computed
-      // code isn't one of the approved values (e.g. an unusual pairing),
-      // fall back to Metal Col 1 alone rather than sending a value that
-      // would get rejected by the sheet's dropdown validation.
       const mc1 = (data['Metal Col 1'] || '').trim();
       const mc2 = (data['Metal Col 2'] || '').trim();
       let combinedColor = '';
@@ -682,7 +633,6 @@
       }
       derived['_METAL_COLOR_COMBINED'] = combinedColor;
 
-      // Stone-derived summaries from the raw rows.
       const stones = Array.isArray(data._RAW_STONES) ? data._RAW_STONES : [];
       let totalQty = 0;
       const types = [], sources = [], settings = [];
@@ -702,11 +652,19 @@
       return derived;
     }
 
-    // ============================================================================
-    // PDF-ONLY SUBMIT: generates the enterprise job-card PDF and triggers a
-    // browser download. No server/Apps Script/fetch call of any kind — this
-    // form is now fully standalone.
-    // ============================================================================
+    function downloadJSON(fileName, dataObj) {
+      const json = JSON.stringify(dataObj, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
     async function submitForm() {
       const form = document.getElementById('cadForm');
       if (!form.checkValidity()) { form.reportValidity(); return; }
@@ -714,7 +672,7 @@
       const loader = document.getElementById('loader-overlay');
       const submitBtn = document.getElementById('submitBtn');
       loader.classList.remove('hidden');
-      document.getElementById('loader-text').innerText = "Generating PDF...";
+      document.getElementById('loader-text').innerText = "Generating PDF & data file...";
       submitBtn.disabled = true;
 
       const dataObj = {};
@@ -725,12 +683,15 @@
       dataObj._CLIENT_REF_IMAGES = clientRefImages.map(img => ({ id: img.id, dataUrl: img.dataUrl }));
       Object.assign(dataObj, computeDerivedFields(dataObj));
 
-      const exactJobNumber = dataObj['JobNo'] || dataObj['ItemNo'] || "JobCard";
+      // Filename: JobNo_ItemNo only, per requirement (SKU never used in filename).
+      const fileNameParts = [dataObj['JobNo'], dataObj['ItemNo']]
+        .map(v => (v || '').toString().trim())
+        .filter(Boolean);
+      const exactJobNumber = fileNameParts.length ? fileNameParts.join('_') : "JobCard";
 
       try {
-        // generateEnterprisePDF() calls doc.save(...) internally, which
-        // triggers the browser's native file download directly.
         await generateEnterprisePDF(exactJobNumber, dataObj);
+        setTimeout(() => downloadJSON(exactJobNumber, dataObj), 400);
         loader.classList.add('hidden');
         submitBtn.disabled = false;
       } catch (err) {
@@ -741,20 +702,15 @@
       }
     }
 
-    // ============================================================================
-    // NEW ENTERPRISE NATIVE PDF GENERATOR
-    // ============================================================================
     async function generateEnterprisePDF(fileName, formData) {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-      // Embed hidden data (required for the Load PDF feature)
       doc.setFontSize(1); 
       doc.setTextColor(255, 255, 255);
       doc.text(`%%CAD_FORM_DATA_START%%${JSON.stringify(formData)}%%CAD_FORM_DATA_END%%`, 0, 0);
 
-      // ----- 1. HEADER BANNER (Main Details: Job No / Item No) -----
-      doc.setFillColor(30, 41, 59); // Slate-800 Dark Blue
+      doc.setFillColor(30, 41, 59);
       doc.rect(0, 0, 210, 35, 'F');
 
       doc.setTextColor(255, 255, 255);
@@ -769,9 +725,6 @@
       doc.text(`SKU: ${formData['Style code'] || 'N/A'}`, 150, 26);
       doc.text(`DATE: ${formData['Inquiry start date'] || 'N/A'}`, 150, 32);
 
-      // ----- 2. SUB DETAILS -----
-      // Ship Date, Vendor SKU, and Alloy Type are intentionally NOT printed -
-      // they're still captured on the form, just excluded from this job card.
       const fmt2 = (v) => { const n = parseFloat(v); return isNaN(n) ? '0.00' : n.toFixed(2); };
       let currentY = 42;
       doc.setFillColor(30, 41, 59);
@@ -803,7 +756,6 @@
       });
       currentY = doc.lastAutoTable.finalY + 8;
 
-      // ----- 3. PRIMARY CAD IMAGE (the first version with content) -----
       const allCadVersions = (formData._VERSIONS || []).filter(v => v.dataUrl);
       const primaryCad = allCadVersions[0];
       const additionalCadVersions = allCadVersions.slice(1);
@@ -817,24 +769,26 @@
         currentY += 6;
         try {
           const props = doc.getImageProperties(primaryCad.dataUrl);
-          const maxH = 90;
+          const maxH = 130;
           const r = Math.min(182 / props.width, maxH / props.height);
           doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, currentY, props.width * r, props.height * r, undefined, 'FAST');
           currentY += props.height * r + 8;
         } catch(e) { console.error("Primary CAD image render error", e); }
       }
 
-      // ----- 4. STONE DETAILS -----
-      const fmtDim = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(2); };
+      const fmtDim = (v) => { const n = parseFloat(v); return isNaN(n) ? '' : n.toFixed(2); };
       const fmtWt4 = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(4); };
       const fmtWt3 = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(3); };
+      const fmtMMSize = (s) => {
+        const dims = [fmtDim(s.L), fmtDim(s.W), fmtDim(s.H)].filter(Boolean);
+        return dims.length ? dims.join(' x ') : '-';
+      };
       let stoneData = formData._RAW_STONES.filter(s => s.Stone || s.Shape || s.Qty).map(s => [
          s.Pos || '-', s.Stone || '-', s.Shape || '-',
-         (s.L || s.W || s.H) ? `${fmtDim(s.L)}x${fmtDim(s.W)}x${fmtDim(s.H)}` : '-',
+         fmtMMSize(s),
          fmtWt4(s.AvgWt || s.Sieve), s.Qty || '-', fmtWt3(s.Tot), s.Set || '-', s.Source || '-'
       ]);
 
-      // Start a fresh page if there's not enough room left for the section title + a row or two.
       if (currentY > 250) { doc.addPage(); currentY = 14; }
 
       doc.setFillColor(30, 41, 59);
@@ -863,7 +817,6 @@
       doc.text(`NO. OF STONES: ${document.getElementById('sumQty').innerText}     |     TOTAL STONE WEIGHT: ${document.getElementById('sumWt').innerText} ct`, 14, currentY);
       currentY += 10;
 
-      // ----- 5. CLIENT INSTRUCTIONS -----
       if (currentY > 260) { doc.addPage(); currentY = 14; }
       doc.setFillColor(30, 41, 59);
       doc.setFont("helvetica", "bold");
@@ -881,7 +834,6 @@
       let splitNotes = doc.splitTextToSize(formData['Client Notes'] || 'No specific instructions provided.', 174);
       doc.text(splitNotes, 18, currentY + 7);
 
-      // ----- 6. ADDITIONAL CAD IMAGES (any versions beyond the primary one) -----
       const drawFullPageImage = (dataUrl, titleText) => {
         doc.addPage();
         doc.setFillColor(30, 41, 59);
@@ -901,7 +853,6 @@
         drawFullPageImage(v.dataUrl, `ADDITIONAL CAD IMAGE ${index + 2}`);
       });
 
-      // ----- 7. REFERENCE IMAGES (3 per row; overflow wraps to further pages) -----
       const refImages = (formData._CLIENT_REF_IMAGES || []).filter(img => img && img.dataUrl);
       if (refImages.length > 0) {
         doc.addPage();
@@ -912,16 +863,16 @@
         doc.setFont('helvetica', 'bold');
         doc.text('REFERENCE IMAGES', 14, 13);
 
-        let rx = 14, ry = 30;
-        const boxW = 58, boxH = 70, gap = 4;
+        let ry = 30;
+        const boxW = 88, boxH = 100, gap = 6;
         refImages.forEach((img, i) => {
-          const col = i % 3;
-          if (col === 0 && i > 0) { ry += boxH + 10; }
-          if (ry + boxH > 280) { doc.addPage(); ry = 20; }
+          const col = i % 2;
+          if (col === 0 && i > 0) { ry += boxH + 12; }
+          if (ry + boxH > 270) { doc.addPage(); ry = 20; }
           const bx = 14 + col * (boxW + gap);
           doc.setDrawColor(203, 213, 225);
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
-          doc.text(`Reference Image ${i + 1}`, bx, ry - 2);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105);
+          doc.text(`Reference Image ${i + 1}`, bx, ry - 3);
           try {
             const props = doc.getImageProperties(img.dataUrl);
             const r = Math.min(boxW / props.width, boxH / props.height);
@@ -935,10 +886,6 @@
       return doc.output('datauristring');
     }
     
-    // --- Load PDF feature: now supports BOTH our own form-generated PDFs
-    // AND external CAD intake PDFs (e.g. Diacrown job sheets) that embed the
-    // same %%CAD_FORM_DATA_START%%...%%CAD_FORM_DATA_END%% marker but with a
-    // different JSON schema. We detect which schema it is and adapt accordingly.
     async function handlePdfUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -953,8 +900,6 @@
                     if(typeof pdfjsLib === 'undefined') { alert("PDF processor not ready. Please refresh."); return; }
                     const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
 
-                    // Search every page for the marker, not just page 1 - some source
-                    // systems may place it on a different page or split it across pages.
                     let fullText = '';
                     for (let pNum = 1; pNum <= pdf.numPages; pNum++) {
                         const page = await pdf.getPage(pNum);
@@ -977,7 +922,7 @@
                     const schema = detectPdfSchema(rawData);
                     if (schema === 'own') {
                         populateForm(rawData);
-                        alert('✅ PDF data loaded successfully. Check the Version Tabs to see previously saved images.');
+                        alert('✅ PDF data loaded successfully. Check the tabs to see previously saved images.');
                     } else if (schema === 'diacrown') {
                         const { mapped } = mapDiacrownDataToForm(rawData);
                         populateForm(mapped);
@@ -1001,10 +946,6 @@
         event.target.value = null;
     }
 
-    // Identifies which JSON schema the embedded marker data uses.
-    // 'own'      -> generated by THIS form (has our exact field names, e.g. "JobNo")
-    // 'diacrown' -> Diacrown's CAD intake job sheet format (has "Job #", "Gemstones", etc.)
-    // 'unknown'  -> some other / future source we don't have a mapping for yet
     function detectPdfSchema(data) {
         if (data && typeof data === 'object') {
             if ('JobNo' in data || '_RAW_STONES' in data) return 'own';
@@ -1013,13 +954,6 @@
         return 'unknown';
     }
 
-    // Case-insensitive match of a raw external value against one of our dropdown
-    // option arrays. Tries exact match, then case-insensitive exact, then a known
-    // synonym table (for cases like "Platinum" -> "PT"). Deliberately does NOT do
-    // loose substring matching for short codes (e.g. "950" inside "PT 950") since
-    // that produces false positives across unrelated fields (platinum purity vs.
-    // a metal-color code that happens to also be "950"). Returns null if nothing
-    // fits confidently, so the caller leaves the field blank rather than guessing.
     const METAL_SYNONYMS = {
         'platinum': 'PT', 'plat': 'PT', 'pt': 'PT',
         'white gold': 'WG', 'yellow gold': 'YG', 'rose gold': 'RG',
@@ -1048,13 +982,6 @@
         return null;
     }
 
-    // Maps Diacrown's CAD intake JSON schema onto this form's field names.
-    // STRICT MAPPING ONLY: a field is filled in only if its value can be matched
-    // to one of this form's existing dropdown options. Anything that can't be
-    // matched is left blank for manual entry - it is not guessed, not stuffed
-    // into Client Notes, and not surfaced in a warning. For gemstones specifically,
-    // if the Shape can't be matched to a known shape, that entire stone row is
-    // skipped rather than imported half-filled.
     function mapDiacrownDataToForm(d) {
         const out = {
             JobNo: d['Job #'] || '',
@@ -1063,7 +990,6 @@
             'Item Size': d['Product Size'] || ''
         };
 
-        // Dropdown-backed fields: only filled in on a confident match.
         const tryMatch = (rawVal, optionsArray, fieldKey) => {
             if (!rawVal) return;
             const matched = fuzzyMatchOption(rawVal, optionsArray);
@@ -1077,14 +1003,11 @@
         tryMatch(d['Rhodium'], dropdownData.rhodium, 'Rhodium');
         tryMatch(d['Stamping Metal'], dropdownData.stamping, 'Stamping');
 
-        // Gemstones[] -> our _RAW_STONES row format. Only stones whose Shape
-        // matches one of our known shapes are imported; everything else is
-        // skipped so the team isn't left with half-mapped rows to untangle.
         const rawStones = [];
         if (Array.isArray(d['Gemstones'])) {
             d['Gemstones'].forEach(g => {
                 const matchedShape = fuzzyMatchOption(g['Shape'], dropdownData.shapes);
-                if (!matchedShape) return; // skip this stone entirely
+                if (!matchedShape) return;
 
                 const matchedStone = fuzzyMatchOption(g['Type'], dropdownData.stoneTypes);
                 const sizeNums = (g['Size'] || '').match(/[\d.]+/g) || [];
@@ -1125,10 +1048,11 @@
         }
         
         if(data._VERSIONS && data._VERSIONS.length > 0) {
-            imageVersions = data._VERSIONS;
-            imageVersions.forEach(v => { if(v.dataUrl) v.locked = true; });
-            activeTabId = imageVersions[imageVersions.length - 1].id;
-            versionCounter = Math.max(...imageVersions.map(v => v.id));
+            // Only one CAD image slot now — take the first entry with a
+            // dataUrl (older multi-image JSON/PDF exports may still have
+            // several; we only keep the first one to match the current form).
+            const firstWithImage = data._VERSIONS.find(v => v.dataUrl) || data._VERSIONS[0];
+            imageVersions = [{ id: 1, dataUrl: firstWithImage.dataUrl || null, fileObj: null, locked: !!firstWithImage.dataUrl }];
             renderImageTabs();
         }
 
@@ -1168,7 +1092,6 @@
                 setIfNumeric('.d-tot', s.Tot, 3);
                 if(s.Set) row.querySelector('.d-set').value = s.Set;
                 if(s.Source) row.querySelector('.d-source').value = s.Source;
-                // If dims were saved manually (custom size or shape without size table), show them
                 if(rowMode === 'standard' && (s.L || s.W || s.H) && row.querySelector('.d-dims-manual')) {
                   row.querySelector('.d-dims-manual').classList.remove('hidden');
                 }
