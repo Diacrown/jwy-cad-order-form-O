@@ -867,10 +867,12 @@
       doc.rect(0, 0, 210, 22, 'F'); // shrunk from 35mm to 22mm — more room for body content below
 
       // Enterprise logo — top-left, sized to fit the shorter banner.
+      // Uses MWL_HEADER_BASE64 (500x220, ~2.27:1 aspect ratio) per the
+      // Made with Love branding — replaces the previous World Shiner mark.
       let logoRightEdge = 10;
       try {
-        const logoH = 14, logoW = logoH * (374 / 307); // preserve aspect ratio
-        doc.addImage(WS_LOGO_BASE64, 'PNG', 10, 4, logoW, logoH, undefined, 'FAST');
+        const logoH = 10, logoW = logoH * (500 / 220); // preserve aspect ratio
+        doc.addImage(MWL_HEADER_BASE64, 'PNG', 10, 6, logoW, logoH, undefined, 'FAST');
         logoRightEdge = 10 + logoW;
       } catch (e) { console.error('Logo render error', e); }
 
@@ -878,13 +880,6 @@
       doc.setFontSize(15);
       doc.setFont("helvetica", "bold");
       doc.text("CAD PRODUCTION CARD", logoRightEdge + 6, 13);
-
-      // "Made with Love" tagline mark — small, subtle, placed just under
-      // the title within the same compact banner.
-      try {
-        const tagH = 6, tagW = tagH * (500 / 220);
-        doc.addImage(WS_TAGLINE_BASE64, 'PNG', logoRightEdge + 6, 15, tagW, tagH, undefined, 'FAST');
-      } catch (e) { console.error('Tagline render error', e); }
 
       // Job No / Item No / SKU / Date — compact 2x2 grid on the right side
       // of the same banner row instead of a tall single column, so the
@@ -1011,14 +1006,16 @@
       const drawPageBanner = (titleText) => {
         doc.setFillColor(30, 41, 59);
         doc.rect(0, 0, 210, 20, 'F');
+        let bannerLogoW = 0;
         try {
-          const logoH = 13, logoW = logoH * (374 / 307);
-          doc.addImage(WS_LOGO_BASE64, 'PNG', 8, 3.5, logoW, logoH, undefined, 'FAST');
+          const logoH = 9, logoW = logoH * (500 / 220);
+          doc.addImage(MWL_HEADER_BASE64, 'PNG', 8, 5.5, logoW, logoH, undefined, 'FAST');
+          bannerLogoW = logoW;
         } catch (e) {}
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text(titleText, 8 + (13 * (374 / 307)) + 6, 13);
+        doc.text(titleText, 8 + bannerLogoW + 6, 13);
       };
 
       const drawFullPageImage = (dataUrl, titleText) => {
