@@ -867,12 +867,13 @@
       doc.rect(0, 0, 210, 22, 'F'); // shrunk from 35mm to 22mm — more room for body content below
 
       // Enterprise logo — top-left, sized to fit the shorter banner.
-      // Uses MWL_HEADER_BASE64 (500x220, ~2.27:1 aspect ratio) per the
+      // Uses WS_TAGLINE_BASE64 (white "Made with Love" mark, 500x220,
+      // ~2.27:1 aspect ratio) so it reads clearly on the dark navy banner —
       // Made with Love branding — replaces the previous World Shiner mark.
       let logoRightEdge = 10;
       try {
-        const logoH = 10, logoW = logoH * (500 / 220); // preserve aspect ratio
-        doc.addImage(MWL_HEADER_BASE64, 'PNG', 10, 6, logoW, logoH, undefined, 'FAST');
+        const logoH = 15, logoW = logoH * (500 / 220); // preserve aspect ratio, sized up for legibility of the thin script font
+        doc.addImage(WS_TAGLINE_BASE64, 'PNG', 10, 3.5, logoW, logoH, undefined, 'FAST');
         logoRightEdge = 10 + logoW;
       } catch (e) { console.error('Logo render error', e); }
 
@@ -1008,8 +1009,8 @@
         doc.rect(0, 0, 210, 20, 'F');
         let bannerLogoW = 0;
         try {
-          const logoH = 9, logoW = logoH * (500 / 220);
-          doc.addImage(MWL_HEADER_BASE64, 'PNG', 8, 5.5, logoW, logoH, undefined, 'FAST');
+          const logoH = 13, logoW = logoH * (500 / 220);
+          doc.addImage(WS_TAGLINE_BASE64, 'PNG', 8, 3.5, logoW, logoH, undefined, 'FAST');
           bannerLogoW = logoW;
         } catch (e) {}
         doc.setTextColor(255, 255, 255);
