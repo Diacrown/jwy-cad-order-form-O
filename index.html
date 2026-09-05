@@ -792,9 +792,20 @@
       }
       const zip = new JSZip();
 
-      // PDF entry
+      // PDF entry (main enterprise card)
       const pdfBase64 = pdfDataUriString.split('base64,').pop();
       zip.file(fileName + '.pdf', pdfBase64, { base64: true });
+
+      // PO PDF entry — leaner variant for Purchase Order purposes (no
+      // banner/branding, just CAD image, reference images, stone details,
+      // and total weight).
+      try {
+        const poDataUri = await generatePOPdf(dataObj);
+        const poBase64 = poDataUri.split('base64,').pop();
+        zip.file(fileName + '_PO.pdf', poBase64, { base64: true });
+      } catch (poErr) {
+        console.error('PO PDF generation failed:', poErr);
+      }
 
       // PNG entry/entries
       const pngBlobs = await renderPdfPagesToPngBlobs(pdfDataUriString);
@@ -853,6 +864,139 @@
         loader.classList.add('hidden');
         submitBtn.disabled = false;
       }
+    }
+
+    // ============================================================================
+    // PO PDF — a leaner variant for Purchase Order purposes. No header
+    // banner/branding/Job-Item-SKU block/Sub Details/Client Instructions —
+    // just the CAD image, reference images, stone details table, and total
+    // weight, using the full page body since there's no banner eating space
+    // at the top. Bundled as a 4th file inside the ZIP alongside the main
+    // enterprise PDF, PNG(s), and JSON.
+    // ============================================================================
+    async function generatePOPdf(formData) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+      const fmt2 = (v) => { const n = parseFloat(v); return isNaN(n) ? '0.00' : n.toFixed(2); };
+      const fmtDim = (v) => { const n = parseFloat(v); return isNaN(n) ? '' : n.toFixed(2); };
+      const fmtWt4 = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(4); };
+      const fmtWt3 = (v) => { const n = parseFloat(v); return isNaN(n) ? '-' : n.toFixed(3); };
+      const fmtMMSize = (s) => {
+        const dims = [fmtDim(s.L), fmtDim(s.W), fmtDim(s.H)].filter(Boolean);
+        return dims.length ? dims.join(' x ') : '-';
+      };
+
+      let currentY = 14; // no banner — start right at the top margin
+
+      // ----- CAD IMAGE -----
+      const allCadVersions = (formData._VERSIONS || []).filter(v => v.dataUrl);
+      const primaryCad = allCadVersions[0];
+
+      if (primaryCad) {
+        doc.setTextColor(30, 41, 59);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("CAD IMAGE", 14, currentY);
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.3);
+        doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+        currentY += 7;
+        try {
+          const props = doc.getImageProperties(primaryCad.dataUrl);
+          const maxH = 150; // larger than the enterprise PDF's 130mm — no banner to compete for space with
+          const r = Math.min(182 / props.width, maxH / props.height);
+          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, currentY, props.width * r, props.height * r, undefined, 'FAST');
+          currentY += props.height * r + 10;
+        } catch(e) { console.error("PO PDF: CAD image render error", e); }
+      }
+
+      // ----- STONE DETAILS -----
+      let stoneData = (formData._RAW_STONES || []).filter(s => s.Stone || s.Shape || s.Qty).map(s => [
+         s.Pos || '-', s.Stone || '-', s.Shape || '-',
+         fmtMMSize(s),
+         fmtWt4(s.AvgWt || s.Sieve), s.Qty || '-', fmtWt3(s.Tot), s.Set || '-', s.Source || '-'
+      ]);
+
+      if (currentY > 250) { doc.addPage(); currentY = 14; }
+
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("STONE DETAILS", 14, currentY);
+      doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+      currentY += 7;
+
+      if (stoneData.length > 0) {
+          doc.autoTable({
+            startY: currentY,
+            theme: 'grid',
+            styles: { cellPadding: 2 },
+            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
+            bodyStyles: { fontSize: 8, fontStyle: 'bold', halign: 'center', textColor: [71, 85, 105] },
+            head: [['Pos', 'Stone', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
+            body: stoneData
+          });
+          currentY = doc.lastAutoTable.finalY + 8;
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(148, 163, 184);
+        doc.text("No stones recorded.", 14, currentY);
+        currentY += 10;
+      }
+
+      // ----- TOTAL WEIGHT -----
+      // Metal weight (grams) and stone weight (carats) are different units,
+      // so they're shown as separate clearly-labeled totals rather than
+      // summed into one number.
+      const metal1Wt = parseFloat(formData['Metal 1 Weight']) || 0;
+      const metal2Wt = parseFloat(formData['Metal 2 Weight']) || 0;
+      const totalMetalWt = metal1Wt + metal2Wt;
+      const stoneQtyText = document.getElementById('sumQty') ? document.getElementById('sumQty').innerText : '0';
+      const stoneWtText = document.getElementById('sumWt') ? document.getElementById('sumWt').innerText : '0.000';
+
+      if (currentY > 265) { doc.addPage(); currentY = 14; }
+
+      doc.setFillColor(241, 245, 249);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(14, currentY, 182, 20, 2, 2, 'FD');
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(`TOTAL METAL WEIGHT: ${fmt2(totalMetalWt)} g`, 20, currentY + 8);
+      doc.text(`NO. OF STONES: ${stoneQtyText}   |   TOTAL STONE WEIGHT: ${stoneWtText} ct`, 20, currentY + 15);
+
+      // ----- REFERENCE IMAGES (own page, same 2-per-row layout as the enterprise PDF) -----
+      const refImages = (formData._CLIENT_REF_IMAGES || []).filter(img => img && img.dataUrl);
+      if (refImages.length > 0) {
+        doc.addPage();
+        doc.setTextColor(30, 41, 59);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("REFERENCE IMAGES", 14, 14);
+        doc.line(14, 15.5, 196, 15.5);
+
+        const boxW = 88, boxH = 110, gap = 6; // taller boxes than the enterprise PDF since there's no banner competing for vertical space
+        let ry = 24;
+        refImages.forEach((img, i) => {
+          const col = i % 2;
+          if (col === 0 && i > 0) { ry += boxH + 12; }
+          if (ry + boxH > 280) { doc.addPage(); ry = 14; }
+          const bx = 14 + col * (boxW + gap);
+          doc.setDrawColor(203, 213, 225);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105);
+          doc.text(`Reference Image ${i + 1}`, bx, ry - 3);
+          try {
+            const props = doc.getImageProperties(img.dataUrl);
+            const r = Math.min(boxW / props.width, boxH / props.height);
+            const drawW = props.width * r, drawH = props.height * r;
+            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', bx + (boxW - drawW) / 2, ry + (boxH - drawH) / 2, drawW, drawH, undefined, 'FAST');
+          } catch(e) {}
+        });
+      }
+
+      return doc.output('datauristring');
     }
 
     async function generateEnterprisePDF(fileName, formData) {
@@ -971,7 +1115,7 @@
             theme: 'grid',
             styles: { cellPadding: 1.5 },
             headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7, fontStyle: 'bold', halign: 'center' },
-            bodyStyles: { fontSize: 7, halign: 'center', textColor: [71, 85, 105] },
+            bodyStyles: { fontSize: 7, fontStyle: 'bold', halign: 'center', textColor: [71, 85, 105] },
             head: [['Pos', 'Stone', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
             body: stoneData
           });
