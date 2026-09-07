@@ -899,58 +899,72 @@
       ]);
 
       // ----------------------------------------------------------------
-      // Space budgeting: everything (CAD image, stone table, weight
-      // summary, reference images) should fit on page 1 whenever
-      // reasonably possible — only the stone table is allowed to force a
-      // page break, and only when it's genuinely too long to fit. To make
-      // that work, the CAD image's height is sized DOWN from its normal
-      // maximum when other sections need the room, rather than always
-      // claiming a fixed 150mm regardless of what else is on the page.
+      // TOP ZONE: CAD image (left column) and reference images (right
+      // column) side by side, sharing the same row of vertical space
+      // instead of stacking — this uses the page width more efficiently
+      // and leaves more room below for stone details + weight summary to
+      // fit on page 1 without needing a second page.
       // ----------------------------------------------------------------
-      const stoneRowH = 6;             // approx autotable row height at this font size
-      const stoneHeaderBlock = 7 + 8 + (stoneData.length ? stoneData.length * stoneRowH + 8 : 4) + 8;
-      const weightBoxBlock = 20 + 7;
-      const refHeaderBlock = refImages.length > 0 ? 7 + 4 : 0;
-      // One row of ref images (2 per row) if any are present, sized later —
-      // reserve a nominal minimum here just for the initial CAD budget calc.
-      const refRowsEstimate = refImages.length > 0 ? Math.ceil(refImages.length / 2) : 0;
+      const colW = 88, colGap = 6;
+      const leftX = 14, rightX = 14 + colW + colGap;
+      const TOP_ZONE_MAX_H = 145; // cap on how tall the top zone (image row) can be
 
       let currentY = 14;
+      let leftBottomY = currentY, rightBottomY = currentY;
 
-      // ----- CAD IMAGE -----
+      // ----- LEFT: CAD IMAGE -----
       if (primaryCad) {
         doc.setTextColor(30, 41, 59);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.text("CAD IMAGE", 14, currentY);
+        doc.setFontSize(11);
+        doc.text("CAD IMAGE", leftX, currentY);
         doc.setDrawColor(203, 213, 225);
         doc.setLineWidth(0.3);
-        doc.line(14, currentY + 1.5, 196, currentY + 1.5);
-        currentY += 7;
+        doc.line(leftX, currentY + 1.5, leftX + colW, currentY + 1.5);
+        let imgY = currentY + 7;
         try {
           const props = doc.getImageProperties(primaryCad.dataUrl);
-
-          // Budget the CAD image's max height against everything else that
-          // still needs to fit below it on this same page — including at
-          // least one row of reference images if any exist, so they have a
-          // real shot at landing on page 1 too instead of just the header.
-          const minRefRowForBudget = refImages.length > 0 ? 45 : 0;
-          const reservedBelow = stoneHeaderBlock + weightBoxBlock + refHeaderBlock + minRefRowForBudget;
-          const availableForImage = (PAGE_BOTTOM - currentY) - reservedBelow;
-          // Still generous (up to 150mm) when there's a lot of room — e.g.
-          // few stone rows and no reference images — but shrinks instead of
-          // overflowing when the page is more crowded. Never smaller than
-          // 50mm so the image stays legible; below that it's fine to let
-          // stone details push to page 2 instead of shrinking further.
-          const maxH = Math.max(50, Math.min(150, availableForImage));
-
-          const r = Math.min(182 / props.width, maxH / props.height);
-          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, currentY, props.width * r, props.height * r, undefined, 'FAST');
-          currentY += props.height * r + 8;
-        } catch(e) { console.error("PO PDF: CAD image render error", e); }
+          const r = Math.min(colW / props.width, TOP_ZONE_MAX_H / props.height);
+          const drawW = props.width * r, drawH = props.height * r;
+          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', leftX + (colW - drawW) / 2, imgY, drawW, drawH, undefined, 'FAST');
+          leftBottomY = imgY + drawH;
+        } catch(e) { console.error("PO PDF: CAD image render error", e); leftBottomY = imgY; }
       }
 
-      // ----- STONE DETAILS -----
+      // ----- RIGHT: REFERENCE IMAGES (stacked within the column; grid if more than fit singly) -----
+      if (refImages.length > 0) {
+        doc.setTextColor(30, 41, 59);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text("REFERENCE IMAGES", rightX, currentY);
+        doc.line(rightX, currentY + 1.5, rightX + colW, currentY + 1.5);
+        let refY = currentY + 7;
+
+        // Single reference image: give it the full top-zone height, same as
+        // the CAD image, for a clean side-by-side pairing (the common case
+        // per the workflow: one CAD image + one reference image).
+        // Multiple reference images: stack them within the same column,
+        // each getting an equal share of the available height.
+        const perImgH = Math.max(35, (TOP_ZONE_MAX_H - (refImages.length - 1) * 4) / refImages.length);
+
+        refImages.forEach((img, i) => {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
+          doc.text(`Reference Image ${i + 1}`, rightX, refY - 1.5);
+          const boxTop = refY + 1.5;
+          try {
+            const props = doc.getImageProperties(img.dataUrl);
+            const r = Math.min(colW / props.width, perImgH / props.height);
+            const drawW = props.width * r, drawH = props.height * r;
+            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', rightX + (colW - drawW) / 2, boxTop, drawW, drawH, undefined, 'FAST');
+            refY = boxTop + drawH + 4;
+          } catch(e) { refY = boxTop + perImgH + 4; }
+        });
+        rightBottomY = refY;
+      }
+
+      currentY = Math.max(leftBottomY, rightBottomY) + 8;
+
+      // ----- STONE DETAILS (full width, below the top zone) -----
       // No manual page-break check here: jsPDF-autotable already breaks to
       // a new page on its own once the table itself runs out of room,
       // which is the one case this layout intentionally allows to overflow.
@@ -958,6 +972,7 @@
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.text("STONE DETAILS", 14, currentY);
+      doc.setDrawColor(203, 213, 225);
       doc.line(14, currentY + 1.5, 196, currentY + 1.5);
       currentY += 7;
 
@@ -1005,53 +1020,6 @@
       doc.setFontSize(10);
       doc.text(`TOTAL METAL WEIGHT: ${fmt2(totalMetalWt)} g`, 20, currentY + 8);
       doc.text(`NO. OF STONES: ${stoneQtyText}   |   TOTAL STONE WEIGHT: ${stoneWtText} ct`, 20, currentY + 15);
-      currentY += 20 + 7;
-
-      // ----- REFERENCE IMAGES -----
-      // Continues on the SAME page directly below the weight box whenever
-      // there's room for at least the section header + one row of images;
-      // only breaks to a fresh page when there genuinely isn't space left.
-      if (refImages.length > 0) {
-        const boxW = 88, gap = 6;
-        const headerH = 7 + 4;
-        const minBoxH = 45; // matches the reservation made in the CAD image budget above; below this, start a fresh page
-
-        let onNewPage = false;
-        if (currentY + headerH + minBoxH > PAGE_BOTTOM) {
-          doc.addPage();
-          currentY = 14;
-          onNewPage = true;
-        }
-
-        doc.setTextColor(30, 41, 59);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.text("REFERENCE IMAGES", 14, currentY);
-        doc.line(14, currentY + 1.5, 196, currentY + 1.5);
-        currentY += headerH;
-
-        // Size the box height to use whatever room remains on this page for
-        // the first row, capped at a comfortable maximum; subsequent rows
-        // (if any) reuse the same height for visual consistency.
-        const boxH = Math.max(minBoxH, Math.min(110, onNewPage ? (PAGE_BOTTOM - currentY) : (PAGE_BOTTOM - currentY)));
-
-        let ry = currentY;
-        refImages.forEach((img, i) => {
-          const col = i % 2;
-          if (col === 0 && i > 0) { ry += boxH + 12; }
-          if (ry + boxH > PAGE_BOTTOM) { doc.addPage(); ry = 14; }
-          const bx = 14 + col * (boxW + gap);
-          doc.setDrawColor(203, 213, 225);
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105);
-          doc.text(`Reference Image ${i + 1}`, bx, ry - 3);
-          try {
-            const props = doc.getImageProperties(img.dataUrl);
-            const r = Math.min(boxW / props.width, boxH / props.height);
-            const drawW = props.width * r, drawH = props.height * r;
-            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', bx + (boxW - drawW) / 2, ry + (boxH - drawH) / 2, drawW, drawH, undefined, 'FAST');
-          } catch(e) {}
-        });
-      }
 
       return doc.output('datauristring');
     }
