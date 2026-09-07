@@ -796,15 +796,21 @@
       const pdfBase64 = pdfDataUriString.split('base64,').pop();
       zip.file(fileName + '.pdf', pdfBase64, { base64: true });
 
-      // PO PDF entry — leaner variant for Purchase Order purposes (no
-      // banner/branding, just CAD image, reference images, stone details,
-      // and total weight).
+      // PO IMAGE entry/entries — leaner variant for Purchase Order purposes
+      // (no banner/branding, just CAD image, reference images, stone
+      // details, and total weight). Generated as a PDF internally (so the
+      // existing jsPDF layout logic can be reused), then rasterized to
+      // PNG(s) via pdf.js — only the PNG(s) go into the zip, not the PDF
+      // itself, per the PO output being image-only.
       try {
         const poDataUri = await generatePOPdf(dataObj);
-        const poBase64 = poDataUri.split('base64,').pop();
-        zip.file(fileName + '_PO.pdf', poBase64, { base64: true });
+        const poPngBlobs = await renderPdfPagesToPngBlobs(poDataUri);
+        poPngBlobs.forEach((blob, i) => {
+          const poPngName = poPngBlobs.length > 1 ? `${fileName}_PO_page${i + 1}.png` : `${fileName}_PO.png`;
+          zip.file(poPngName, blob);
+        });
       } catch (poErr) {
-        console.error('PO PDF generation failed:', poErr);
+        console.error('PO image generation failed:', poErr);
       }
 
       // PNG entry/entries
@@ -901,15 +907,19 @@
       // ----------------------------------------------------------------
       // TOP ZONE: CAD image (left column) and reference images (right
       // column) side by side. The CAD image is the primary/main image per
-      // the workflow, so it gets a wider column (110mm vs 66mm) — this
+      // the workflow, so it gets a wider column (116mm vs 60mm) — this
       // matters because CAD renders are often wide multi-view grids that
       // would otherwise hit their width limit long before using the full
       // available height, leaving the column looking underfilled.
+      // When there are NO reference images, the CAD image uses the FULL
+      // page width instead of being squeezed into a narrower left column
+      // with an empty gap where the reference column would be.
       // The reference column's height target is pinned to whatever the CAD
       // image actually renders at, so the two columns' bottoms line up
       // instead of the shorter one leaving a gap.
       // ----------------------------------------------------------------
-      const leftColW = 116, rightColW = 60, colGap = 6;
+      const hasRefImages = refImages.length > 0;
+      const leftColW = hasRefImages ? 116 : 182, rightColW = 60, colGap = 6;
       const leftX = 14, rightX = 14 + leftColW + colGap;
       const TOP_ZONE_MAX_H = 220; // generous cap — actual height is usually set by the CAD image's own aspect ratio well before this
 
