@@ -887,12 +887,37 @@
         return dims.length ? dims.join(' x ') : '-';
       };
 
-      let currentY = 14; // no banner — start right at the top margin
+      const PAGE_BOTTOM = 283; // usable page height before the bottom margin
 
-      // ----- CAD IMAGE -----
       const allCadVersions = (formData._VERSIONS || []).filter(v => v.dataUrl);
       const primaryCad = allCadVersions[0];
+      const refImages = (formData._CLIENT_REF_IMAGES || []).filter(img => img && img.dataUrl);
+      let stoneData = (formData._RAW_STONES || []).filter(s => s.Stone || s.Shape || s.Qty).map(s => [
+         s.Pos || '-', s.Stone || '-', s.Shape || '-',
+         fmtMMSize(s),
+         fmtWt4(s.AvgWt || s.Sieve), s.Qty || '-', fmtWt3(s.Tot), s.Set || '-', s.Source || '-'
+      ]);
 
+      // ----------------------------------------------------------------
+      // Space budgeting: everything (CAD image, stone table, weight
+      // summary, reference images) should fit on page 1 whenever
+      // reasonably possible — only the stone table is allowed to force a
+      // page break, and only when it's genuinely too long to fit. To make
+      // that work, the CAD image's height is sized DOWN from its normal
+      // maximum when other sections need the room, rather than always
+      // claiming a fixed 150mm regardless of what else is on the page.
+      // ----------------------------------------------------------------
+      const stoneRowH = 6;             // approx autotable row height at this font size
+      const stoneHeaderBlock = 7 + 8 + (stoneData.length ? stoneData.length * stoneRowH + 8 : 4) + 8;
+      const weightBoxBlock = 20 + 7;
+      const refHeaderBlock = refImages.length > 0 ? 7 + 4 : 0;
+      // One row of ref images (2 per row) if any are present, sized later —
+      // reserve a nominal minimum here just for the initial CAD budget calc.
+      const refRowsEstimate = refImages.length > 0 ? Math.ceil(refImages.length / 2) : 0;
+
+      let currentY = 14;
+
+      // ----- CAD IMAGE -----
       if (primaryCad) {
         doc.setTextColor(30, 41, 59);
         doc.setFont("helvetica", "bold");
@@ -904,22 +929,31 @@
         currentY += 7;
         try {
           const props = doc.getImageProperties(primaryCad.dataUrl);
-          const maxH = 150; // larger than the enterprise PDF's 130mm — no banner to compete for space with
+
+          // Budget the CAD image's max height against everything else that
+          // still needs to fit below it on this same page — including at
+          // least one row of reference images if any exist, so they have a
+          // real shot at landing on page 1 too instead of just the header.
+          const minRefRowForBudget = refImages.length > 0 ? 45 : 0;
+          const reservedBelow = stoneHeaderBlock + weightBoxBlock + refHeaderBlock + minRefRowForBudget;
+          const availableForImage = (PAGE_BOTTOM - currentY) - reservedBelow;
+          // Still generous (up to 150mm) when there's a lot of room — e.g.
+          // few stone rows and no reference images — but shrinks instead of
+          // overflowing when the page is more crowded. Never smaller than
+          // 50mm so the image stays legible; below that it's fine to let
+          // stone details push to page 2 instead of shrinking further.
+          const maxH = Math.max(50, Math.min(150, availableForImage));
+
           const r = Math.min(182 / props.width, maxH / props.height);
           doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, currentY, props.width * r, props.height * r, undefined, 'FAST');
-          currentY += props.height * r + 10;
+          currentY += props.height * r + 8;
         } catch(e) { console.error("PO PDF: CAD image render error", e); }
       }
 
       // ----- STONE DETAILS -----
-      let stoneData = (formData._RAW_STONES || []).filter(s => s.Stone || s.Shape || s.Qty).map(s => [
-         s.Pos || '-', s.Stone || '-', s.Shape || '-',
-         fmtMMSize(s),
-         fmtWt4(s.AvgWt || s.Sieve), s.Qty || '-', fmtWt3(s.Tot), s.Set || '-', s.Source || '-'
-      ]);
-
-      if (currentY > 250) { doc.addPage(); currentY = 14; }
-
+      // No manual page-break check here: jsPDF-autotable already breaks to
+      // a new page on its own once the table itself runs out of room,
+      // which is the one case this layout intentionally allows to overflow.
       doc.setTextColor(30, 41, 59);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -935,7 +969,8 @@
             headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
             bodyStyles: { fontSize: 8, fontStyle: 'bold', halign: 'center', textColor: [71, 85, 105] },
             head: [['Pos', 'Stone', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
-            body: stoneData
+            body: stoneData,
+            margin: { bottom: 14 }
           });
           currentY = doc.lastAutoTable.finalY + 8;
       } else {
@@ -956,7 +991,11 @@
       const stoneQtyText = document.getElementById('sumQty') ? document.getElementById('sumQty').innerText : '0';
       const stoneWtText = document.getElementById('sumWt') ? document.getElementById('sumWt').innerText : '0.000';
 
-      if (currentY > 265) { doc.addPage(); currentY = 14; }
+      // The weight box is the one fixed-size block that always stays
+      // together — if it doesn't fit on the current page, move the whole
+      // box to a fresh page rather than let autotable's own page break
+      // strand it awkwardly right at a page edge.
+      if (currentY + 20 > PAGE_BOTTOM) { doc.addPage(); currentY = 14; }
 
       doc.setFillColor(241, 245, 249);
       doc.setDrawColor(203, 213, 225);
@@ -966,23 +1005,41 @@
       doc.setFontSize(10);
       doc.text(`TOTAL METAL WEIGHT: ${fmt2(totalMetalWt)} g`, 20, currentY + 8);
       doc.text(`NO. OF STONES: ${stoneQtyText}   |   TOTAL STONE WEIGHT: ${stoneWtText} ct`, 20, currentY + 15);
+      currentY += 20 + 7;
 
-      // ----- REFERENCE IMAGES (own page, same 2-per-row layout as the enterprise PDF) -----
-      const refImages = (formData._CLIENT_REF_IMAGES || []).filter(img => img && img.dataUrl);
+      // ----- REFERENCE IMAGES -----
+      // Continues on the SAME page directly below the weight box whenever
+      // there's room for at least the section header + one row of images;
+      // only breaks to a fresh page when there genuinely isn't space left.
       if (refImages.length > 0) {
-        doc.addPage();
+        const boxW = 88, gap = 6;
+        const headerH = 7 + 4;
+        const minBoxH = 45; // matches the reservation made in the CAD image budget above; below this, start a fresh page
+
+        let onNewPage = false;
+        if (currentY + headerH + minBoxH > PAGE_BOTTOM) {
+          doc.addPage();
+          currentY = 14;
+          onNewPage = true;
+        }
+
         doc.setTextColor(30, 41, 59);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
-        doc.text("REFERENCE IMAGES", 14, 14);
-        doc.line(14, 15.5, 196, 15.5);
+        doc.text("REFERENCE IMAGES", 14, currentY);
+        doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+        currentY += headerH;
 
-        const boxW = 88, boxH = 110, gap = 6; // taller boxes than the enterprise PDF since there's no banner competing for vertical space
-        let ry = 24;
+        // Size the box height to use whatever room remains on this page for
+        // the first row, capped at a comfortable maximum; subsequent rows
+        // (if any) reuse the same height for visual consistency.
+        const boxH = Math.max(minBoxH, Math.min(110, onNewPage ? (PAGE_BOTTOM - currentY) : (PAGE_BOTTOM - currentY)));
+
+        let ry = currentY;
         refImages.forEach((img, i) => {
           const col = i % 2;
           if (col === 0 && i > 0) { ry += boxH + 12; }
-          if (ry + boxH > 280) { doc.addPage(); ry = 14; }
+          if (ry + boxH > PAGE_BOTTOM) { doc.addPage(); ry = 14; }
           const bx = 14 + col * (boxW + gap);
           doc.setDrawColor(203, 213, 225);
           doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105);
