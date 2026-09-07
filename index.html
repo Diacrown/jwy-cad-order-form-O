@@ -900,19 +900,24 @@
 
       // ----------------------------------------------------------------
       // TOP ZONE: CAD image (left column) and reference images (right
-      // column) side by side, sharing the same row of vertical space
-      // instead of stacking — this uses the page width more efficiently
-      // and leaves more room below for stone details + weight summary to
-      // fit on page 1 without needing a second page.
+      // column) side by side. The CAD image is the primary/main image per
+      // the workflow, so it gets a wider column (110mm vs 66mm) — this
+      // matters because CAD renders are often wide multi-view grids that
+      // would otherwise hit their width limit long before using the full
+      // available height, leaving the column looking underfilled.
+      // The reference column's height target is pinned to whatever the CAD
+      // image actually renders at, so the two columns' bottoms line up
+      // instead of the shorter one leaving a gap.
       // ----------------------------------------------------------------
-      const colW = 88, colGap = 6;
-      const leftX = 14, rightX = 14 + colW + colGap;
-      const TOP_ZONE_MAX_H = 145; // cap on how tall the top zone (image row) can be
+      const leftColW = 116, rightColW = 60, colGap = 6;
+      const leftX = 14, rightX = 14 + leftColW + colGap;
+      const TOP_ZONE_MAX_H = 220; // generous cap — actual height is usually set by the CAD image's own aspect ratio well before this
 
       let currentY = 14;
       let leftBottomY = currentY, rightBottomY = currentY;
+      let cadImageDrawnH = 0;
 
-      // ----- LEFT: CAD IMAGE -----
+      // ----- LEFT: CAD IMAGE (main image — wider column) -----
       if (primaryCad) {
         doc.setTextColor(30, 41, 59);
         doc.setFont("helvetica", "bold");
@@ -920,32 +925,33 @@
         doc.text("CAD IMAGE", leftX, currentY);
         doc.setDrawColor(203, 213, 225);
         doc.setLineWidth(0.3);
-        doc.line(leftX, currentY + 1.5, leftX + colW, currentY + 1.5);
+        doc.line(leftX, currentY + 1.5, leftX + leftColW, currentY + 1.5);
         let imgY = currentY + 7;
         try {
           const props = doc.getImageProperties(primaryCad.dataUrl);
-          const r = Math.min(colW / props.width, TOP_ZONE_MAX_H / props.height);
+          const r = Math.min(leftColW / props.width, TOP_ZONE_MAX_H / props.height);
           const drawW = props.width * r, drawH = props.height * r;
-          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', leftX + (colW - drawW) / 2, imgY, drawW, drawH, undefined, 'FAST');
+          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', leftX + (leftColW - drawW) / 2, imgY, drawW, drawH, undefined, 'FAST');
           leftBottomY = imgY + drawH;
+          cadImageDrawnH = drawH;
         } catch(e) { console.error("PO PDF: CAD image render error", e); leftBottomY = imgY; }
       }
 
-      // ----- RIGHT: REFERENCE IMAGES (stacked within the column; grid if more than fit singly) -----
+      // ----- RIGHT: REFERENCE IMAGES (narrower column; height matched to the CAD image) -----
       if (refImages.length > 0) {
         doc.setTextColor(30, 41, 59);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
         doc.text("REFERENCE IMAGES", rightX, currentY);
-        doc.line(rightX, currentY + 1.5, rightX + colW, currentY + 1.5);
+        doc.line(rightX, currentY + 1.5, rightX + rightColW, currentY + 1.5);
         let refY = currentY + 7;
 
-        // Single reference image: give it the full top-zone height, same as
-        // the CAD image, for a clean side-by-side pairing (the common case
-        // per the workflow: one CAD image + one reference image).
-        // Multiple reference images: stack them within the same column,
-        // each getting an equal share of the available height.
-        const perImgH = Math.max(35, (TOP_ZONE_MAX_H - (refImages.length - 1) * 4) / refImages.length);
+        // Target height for the whole reference column: match the CAD
+        // image's actual rendered height when there is one (so the two
+        // columns finish at the same Y and no space goes empty), otherwise
+        // fall back to the generous cap.
+        const refZoneTargetH = cadImageDrawnH > 0 ? cadImageDrawnH : TOP_ZONE_MAX_H;
+        const perImgH = Math.max(35, (refZoneTargetH - (refImages.length - 1) * 4) / refImages.length);
 
         refImages.forEach((img, i) => {
           doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
@@ -953,9 +959,9 @@
           const boxTop = refY + 1.5;
           try {
             const props = doc.getImageProperties(img.dataUrl);
-            const r = Math.min(colW / props.width, perImgH / props.height);
+            const r = Math.min(rightColW / props.width, perImgH / props.height);
             const drawW = props.width * r, drawH = props.height * r;
-            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', rightX + (colW - drawW) / 2, boxTop, drawW, drawH, undefined, 'FAST');
+            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', rightX + (rightColW - drawW) / 2, boxTop, drawW, drawH, undefined, 'FAST');
             refY = boxTop + drawH + 4;
           } catch(e) { refY = boxTop + perImgH + 4; }
         });
