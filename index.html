@@ -897,7 +897,6 @@
 
       const allCadVersions = (formData._VERSIONS || []).filter(v => v.dataUrl);
       const primaryCad = allCadVersions[0];
-      const refImages = (formData._CLIENT_REF_IMAGES || []).filter(img => img && img.dataUrl);
       let stoneData = (formData._RAW_STONES || []).filter(s => s.Stone || s.Shape || s.Qty).map(s => [
          s.Pos || '-', s.Stone || '-', s.Shape || '-',
          fmtMMSize(s),
@@ -905,82 +904,51 @@
       ]);
 
       // ----------------------------------------------------------------
-      // TOP ZONE: CAD image (left column) and reference images (right
-      // column) side by side. The CAD image is the primary/main image per
-      // the workflow, so it gets a wider column (116mm vs 60mm) — this
-      // matters because CAD renders are often wide multi-view grids that
-      // would otherwise hit their width limit long before using the full
-      // available height, leaving the column looking underfilled.
-      // When there are NO reference images, the CAD image uses the FULL
-      // page width instead of being squeezed into a narrower left column
-      // with an empty gap where the reference column would be.
-      // The reference column's height target is pinned to whatever the CAD
-      // image actually renders at, so the two columns' bottoms line up
-      // instead of the shorter one leaving a gap.
+      // PO output is intentionally just two sections: CAD image (full page
+      // width, no reference images) and Stone Details + weight summary.
+      // The CAD image's height budget is calculated FIRST by estimating
+      // how much room the stone table will actually need (based on its
+      // real row count), so a short table leaves the image large and a
+      // long table shrinks it — always maximizing the CAD image's share
+      // of the page rather than using one fixed height regardless of
+      // content, per the "capture more space for the main CAD image" goal.
       // ----------------------------------------------------------------
-      const hasRefImages = refImages.length > 0;
-      const leftColW = hasRefImages ? 116 : 182, rightColW = 60, colGap = 6;
-      const leftX = 14, rightX = 14 + leftColW + colGap;
-      const TOP_ZONE_MAX_H = 220; // generous cap — actual height is usually set by the CAD image's own aspect ratio well before this
+      const stoneRowH = 6;   // approx autotable row height at fontSize 8 + cellPadding 2
+      const stoneSectionH = 7 + (stoneData.length > 0 ? (stoneData.length * stoneRowH + 8) : 10) + 8;
+      const weightBoxH = 20;
+      const cadHeaderH = 7;
+      const bottomMargin = 14;
+
+      const availableForImage = PAGE_BOTTOM - 14 - cadHeaderH - stoneSectionH - weightBoxH - bottomMargin;
+      // Generous ceiling (230mm) when the stone table is short; never
+      // smaller than 70mm so the image stays genuinely useful — a very
+      // long stone table is left to push the weight box down or, in an
+      // extreme case, slightly compress rather than shrink the image below
+      // a legible size.
+      const cadMaxH = Math.max(70, Math.min(230, availableForImage));
 
       let currentY = 14;
-      let leftBottomY = currentY, rightBottomY = currentY;
-      let cadImageDrawnH = 0;
 
-      // ----- LEFT: CAD IMAGE (main image — wider column) -----
+      // ----- CAD IMAGE (full page width) -----
       if (primaryCad) {
         doc.setTextColor(30, 41, 59);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.text("CAD IMAGE", leftX, currentY);
+        doc.setFontSize(12);
+        doc.text("CAD IMAGE", 14, currentY);
         doc.setDrawColor(203, 213, 225);
         doc.setLineWidth(0.3);
-        doc.line(leftX, currentY + 1.5, leftX + leftColW, currentY + 1.5);
-        let imgY = currentY + 7;
+        doc.line(14, currentY + 1.5, 196, currentY + 1.5);
+        currentY += cadHeaderH;
         try {
           const props = doc.getImageProperties(primaryCad.dataUrl);
-          const r = Math.min(leftColW / props.width, TOP_ZONE_MAX_H / props.height);
+          const r = Math.min(182 / props.width, cadMaxH / props.height);
           const drawW = props.width * r, drawH = props.height * r;
-          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', leftX + (leftColW - drawW) / 2, imgY, drawW, drawH, undefined, 'FAST');
-          leftBottomY = imgY + drawH;
-          cadImageDrawnH = drawH;
-        } catch(e) { console.error("PO PDF: CAD image render error", e); leftBottomY = imgY; }
+          doc.addImage(primaryCad.dataUrl, primaryCad.dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - drawW) / 2, currentY, drawW, drawH, undefined, 'FAST');
+          currentY += drawH + 8;
+        } catch(e) { console.error("PO PDF: CAD image render error", e); }
       }
 
-      // ----- RIGHT: REFERENCE IMAGES (narrower column; height matched to the CAD image) -----
-      if (refImages.length > 0) {
-        doc.setTextColor(30, 41, 59);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.text("REFERENCE IMAGES", rightX, currentY);
-        doc.line(rightX, currentY + 1.5, rightX + rightColW, currentY + 1.5);
-        let refY = currentY + 7;
-
-        // Target height for the whole reference column: match the CAD
-        // image's actual rendered height when there is one (so the two
-        // columns finish at the same Y and no space goes empty), otherwise
-        // fall back to the generous cap.
-        const refZoneTargetH = cadImageDrawnH > 0 ? cadImageDrawnH : TOP_ZONE_MAX_H;
-        const perImgH = Math.max(35, (refZoneTargetH - (refImages.length - 1) * 4) / refImages.length);
-
-        refImages.forEach((img, i) => {
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
-          doc.text(`Reference Image ${i + 1}`, rightX, refY - 1.5);
-          const boxTop = refY + 1.5;
-          try {
-            const props = doc.getImageProperties(img.dataUrl);
-            const r = Math.min(rightColW / props.width, perImgH / props.height);
-            const drawW = props.width * r, drawH = props.height * r;
-            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', rightX + (rightColW - drawW) / 2, boxTop, drawW, drawH, undefined, 'FAST');
-            refY = boxTop + drawH + 4;
-          } catch(e) { refY = boxTop + perImgH + 4; }
-        });
-        rightBottomY = refY;
-      }
-
-      currentY = Math.max(leftBottomY, rightBottomY) + 8;
-
-      // ----- STONE DETAILS (full width, below the top zone) -----
+      // ----- STONE DETAILS (full width) -----
       // No manual page-break check here: jsPDF-autotable already breaks to
       // a new page on its own once the table itself runs out of room,
       // which is the one case this layout intentionally allows to overflow.
