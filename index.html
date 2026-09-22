@@ -241,6 +241,74 @@
     const MAX_IMAGE_DIMENSION = 1600;
     const IMAGE_JPEG_QUALITY = 0.85;
 
+    // Strips ICC color-profile (and other non-essential APPn) marker
+    // segments from a JPEG data URL. Some browsers/OSes tag
+    // canvas.toDataURL('image/jpeg') output with an embedded ICC profile
+    // (e.g. a "Google Inc." sRGB profile seen from Chrome on Android).
+    // That's a harmless, valid JPEG either way, but PDFium — the engine
+    // behind Microsoft Edge's PDF viewer (a different build/config than
+    // the one bundled with Chrome) — has known inconsistencies handling
+    // color-managed JPEGs embedded in a PDF: a page can render blank or
+    // break specifically when the viewer is zoomed away from 100%, which
+    // re-triggers the color-managed decode path. Chrome's own PDF viewer
+    // tolerates the same file fine. Stripping the profile keeps the
+    // colors as plain sRGB bytes with nothing left for a stricter decoder
+    // to stumble on. This mirrors the fix already applied to the embedded
+    // logo image earlier in this app.
+    function stripJpegIccProfile(dataUrl) {
+      try {
+        const commaIdx = dataUrl.indexOf(',');
+        const header = dataUrl.slice(0, commaIdx);
+        const b64 = dataUrl.slice(commaIdx + 1);
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+        if (bytes[0] !== 0xFF || bytes[1] !== 0xD8) return dataUrl; // not a JPEG (SOI marker missing) — leave as-is
+
+        const out = [0xFF, 0xD8]; // keep SOI
+        let i = 2;
+        while (i < bytes.length - 1) {
+          if (bytes[i] !== 0xFF) { // malformed marker sequence — bail out safely, keep original
+            return dataUrl;
+          }
+          const marker = bytes[i + 1];
+          if (marker === 0xD8 || marker === 0xD9) { // SOI/EOI have no length field
+            out.push(bytes[i], bytes[i + 1]);
+            i += 2;
+            continue;
+          }
+          if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) { // TEM, RSTn — no length field
+            out.push(bytes[i], bytes[i + 1]);
+            i += 2;
+            continue;
+          }
+          const segLen = (bytes[i + 2] << 8) | bytes[i + 3]; // includes the 2 length bytes themselves
+          const isApp2Icc = marker === 0xE2; // APP2 is the standard segment ICC profiles live in
+          if (!isApp2Icc) {
+            for (let k = 0; k < segLen + 2; k++) out.push(bytes[i + k]);
+          }
+          // else: skip this segment entirely (drop the ICC profile)
+          i += segLen + 2;
+          if (marker === 0xDA) { // SOS — scan data follows; copy the rest of the file verbatim and stop parsing markers
+            for (let k = i; k < bytes.length; k++) out.push(bytes[k]);
+            break;
+          }
+        }
+
+        let binaryOut = '';
+        const outBytes = new Uint8Array(out);
+        const chunk = 0x8000;
+        for (let i = 0; i < outBytes.length; i += chunk) {
+          binaryOut += String.fromCharCode.apply(null, outBytes.subarray(i, i + chunk));
+        }
+        return header + ',' + btoa(binaryOut);
+      } catch (e) {
+        console.error('stripJpegIccProfile: leaving image unmodified', e);
+        return dataUrl; // never let this block the upload — worst case, profile stays in
+      }
+    }
+
     function downscaleImageFile(file) {
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -263,7 +331,7 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, targetW, targetH);
 
-          const dataUrl = canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
+          const dataUrl = stripJpegIccProfile(canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY));
           resolve({ dataUrl, mimeType: 'image/jpeg' });
         };
         img.onerror = () => {
@@ -291,11 +359,19 @@
           resolve(dataUrl);
           return;
         }
+        // A JPEG can carry an embedded ICC profile (some browsers/OSes tag
+        // canvas output this way) even when it's already within the size
+        // cap — that profile alone is enough to break rendering in
+        // stricter PDF viewers (see stripJpegIccProfile above), so this
+        // check runs regardless of whether a resize is also needed.
+        if (dataUrl.startsWith('data:image/jpeg')) {
+          dataUrl = stripJpegIccProfile(dataUrl);
+        }
         const img = new Image();
         img.onload = () => {
           const { width, height } = img;
           if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) {
-            resolve(dataUrl); // already within bounds, leave as-is
+            resolve(dataUrl); // already within bounds (ICC already stripped above if it was a JPEG)
             return;
           }
           try {
@@ -307,7 +383,7 @@
             canvas.height = targetH;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, targetW, targetH);
-            resolve(canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY));
+            resolve(stripJpegIccProfile(canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY)));
           } catch (e) {
             console.error('downscaleDataUrlIfNeeded: falling back to original', e);
             resolve(dataUrl); // never block PDF generation over this
@@ -647,7 +723,15 @@
       const entry = entries[parseInt(val, 10)];
       if (!entry) return;
 
-      const nums = (entry.size.match(/[\d.]+/g) || []).map(Number);
+      // entry.size looks like "2.8 mm (0.08-0.09 ct +/-)" for a single-
+      // dimension shape, or "1.25 x 1.00 mm" for a two-dimension one — the
+      // parenthesized part is only a reference weight BAND for that size
+      // point, not a real measurement. Extracting numbers from the whole
+      // string (including the parens) misread that weight range as extra
+      // W/H dimensions. Only the part before the first "(" is ever a real
+      // mm measurement, so that's the only part parsed for dimensions.
+      const dimsPart = entry.size.split('(')[0];
+      const nums = (dimsPart.match(/[\d.]+/g) || []).map(Number);
       row.querySelector('.d-len').value = nums[0] !== undefined ? nums[0].toFixed(2) : '';
       row.querySelector('.d-wid').value = nums[1] !== undefined ? nums[1].toFixed(2) : '';
       row.querySelector('.d-hei').value = nums[2] !== undefined ? nums[2].toFixed(2) : '';
@@ -1251,7 +1335,16 @@
           const props = doc.getImageProperties(dataUrl);
           const r = Math.min(182 / props.width, 250 / props.height);
           doc.addImage(dataUrl, dataUrl.includes('png') ? 'PNG' : 'JPEG', (210 - props.width * r) / 2, 30, props.width * r, props.height * r, undefined, 'FAST');
-        } catch(e) {}
+        } catch(e) {
+          // Never leave a silently blank page — if the image genuinely
+          // can't be decoded (corrupt data, unsupported format), say so
+          // on the page itself instead of just skipping it invisibly.
+          console.error('drawFullPageImage: image render failed', e);
+          doc.setTextColor(220, 38, 38);
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(10);
+          doc.text('(Image could not be rendered — file may be corrupted or in an unsupported format.)', 14, 45);
+        }
       };
 
       additionalCadVersions.forEach((v, index) => {
@@ -1294,22 +1387,55 @@
         // A lone image is stretched to use whatever vertical room is left
         // on the page (floor 100mm, cap 220mm) rather than a fixed 100mm
         // box, so it reads as a deliberate full page, not leftover space.
-        const boxH = isSingle ? Math.max(minBoxH, Math.min(220, pageBottom - ry)) : minBoxH;
+        const maxBoxH = isSingle ? Math.max(minBoxH, Math.min(220, pageBottom - ry)) : minBoxH;
 
+        // For the multi-image grid, each ROW's actual height is driven by
+        // however tall its images render at boxW width (capped at
+        // maxBoxH) — not always the full 100mm. Reference photos are
+        // often landscape/wide and only need 40-70mm at this column
+        // width, so reserving a flat 100mm per row wasted enough space
+        // that a 4-image job (2 rows) was overflowing to an unnecessary
+        // 3rd page even though the real content would fit on 2. Row
+        // height is computed once per row from the tallest image in it.
+        const rowHeightFor = (startIdx) => {
+          if (isSingle) return maxBoxH;
+          let tallest = 0;
+          for (let k = startIdx; k < Math.min(startIdx + 2, refImages.length); k++) {
+            try {
+              const props = doc.getImageProperties(refImages[k].dataUrl);
+              const r = Math.min(boxW / props.width, maxBoxH / props.height);
+              tallest = Math.max(tallest, props.height * r);
+            } catch (e) { tallest = Math.max(tallest, maxBoxH); }
+          }
+          return tallest || maxBoxH;
+        };
+
+        let currentRowH = rowHeightFor(0);
         refImages.forEach((img, i) => {
           const col = isSingle ? 0 : i % 2;
-          if (!isSingle && col === 0 && i > 0) { ry += boxH + 12; }
-          if (ry + boxH > pageBottom) { doc.addPage(); drawPageBanner('REFERENCE IMAGES (CONT.)'); ry = 30; }
+          if (!isSingle && col === 0 && i > 0) {
+            ry += currentRowH + 12;
+            currentRowH = rowHeightFor(i);
+          }
+          if (ry + currentRowH > pageBottom) { doc.addPage(); drawPageBanner('REFERENCE IMAGES (CONT.)'); ry = 30; }
           const bx = isSingle ? 14 : 14 + col * (boxW + gap);
           doc.setDrawColor(203, 213, 225);
           doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(71, 85, 105);
           doc.text(`Reference Image ${i + 1}`, bx, ry - 3);
           try {
             const props = doc.getImageProperties(img.dataUrl);
-            const r = Math.min(boxW / props.width, boxH / props.height);
+            const r = Math.min(boxW / props.width, maxBoxH / props.height);
             const drawW = props.width * r, drawH = props.height * r;
-            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', bx + (boxW - drawW) / 2, ry + (boxH - drawH) / 2, drawW, drawH, undefined, 'FAST');
-          } catch(e) {}
+            doc.addImage(img.dataUrl, img.dataUrl.includes('png') ? 'PNG' : 'JPEG', bx + (boxW - drawW) / 2, ry + (currentRowH - drawH) / 2, drawW, drawH, undefined, 'FAST');
+          } catch(e) {
+            // Same reasoning as drawFullPageImage above — a decode failure
+            // should be visible on the page, not an invisible empty cell.
+            console.error('Reference image render failed', e);
+            doc.setTextColor(220, 38, 38);
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8);
+            doc.text('(Could not render this image)', bx, ry + currentRowH / 2);
+          }
         });
       }
 
@@ -1508,8 +1634,14 @@
                   row.querySelector('.d-shape').value = s.Shape;
                   if (rowMode === 'standard') onShapeChange(row.querySelector('.d-shape'));
                 }
+                let sizeIdxRestored = false;
                 if(rowMode === 'standard' && s.SizeIdx !== undefined && s.SizeIdx !== '' && row.querySelector('.d-size')) {
                   row.querySelector('.d-size').value = s.SizeIdx;
+                  // <select>.value silently stays '' if s.SizeIdx doesn't match
+                  // any current <option> (e.g. the shape's size list changed) —
+                  // confirm the assignment actually took before treating this
+                  // as a successfully-restored dropdown choice.
+                  sizeIdxRestored = row.querySelector('.d-size').value === String(s.SizeIdx);
                 }
                 const setIfNumeric = (selector, rawVal, places) => {
                   const n = parseFloat(rawVal);
@@ -1525,7 +1657,17 @@
                 setIfNumeric('.d-tot', s.Tot, 3);
                 if(s.Set) row.querySelector('.d-set').value = s.Set;
                 if(s.Source) row.querySelector('.d-source').value = s.Source;
-                if(rowMode === 'standard' && (s.L || s.W || s.H) && row.querySelector('.d-dims-manual')) {
+                // Show the manual "Custom / Other Size" fields only when the
+                // row genuinely IS custom — a saved SizeIdx of 'custom', or a
+                // dropdown selection that could no longer be restored (its
+                // shape's size list changed since this job was saved). L/W/H
+                // being populated is NOT itself a sign of a custom size: a
+                // normal dropdown pick (e.g. "Round 2.8mm") fills L/W/H too,
+                // so using that as the trigger incorrectly forced every
+                // dropdown-based row into "custom" mode on reload, hiding
+                // that a real dropdown value had been restored.
+                const isGenuinelyCustom = s.SizeIdx === 'custom' || (rowMode === 'standard' && !sizeIdxRestored);
+                if(rowMode === 'standard' && isGenuinelyCustom && (s.L || s.W || s.H) && row.querySelector('.d-dims-manual')) {
                   row.querySelector('.d-dims-manual').classList.remove('hidden');
                 }
             });
