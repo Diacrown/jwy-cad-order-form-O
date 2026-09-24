@@ -642,12 +642,12 @@
                <option value="">Select Shape First</option>
              </select>
              <div class="d-dims-manual hidden flex flex-row justify-center items-center gap-1 mt-1">
-               <input type="number" step="0.01" class="d-len dim-input" placeholder="L" onblur="formatDecimal(this,2)">x
-               <input type="number" step="0.01" class="d-wid dim-input" placeholder="W" onblur="formatDecimal(this,2)">x
-               <input type="number" step="0.01" class="d-hei dim-input" placeholder="H" onblur="formatDecimal(this,2)">
+               <input type="number" step="0.01" class="d-len dim-input" placeholder="L" onblur="formatDecimal(this,2); tryResolveCustomSize(this)">x
+               <input type="number" step="0.01" class="d-wid dim-input" placeholder="W" onblur="formatDecimal(this,2); tryResolveCustomSize(this)">x
+               <input type="number" step="0.01" class="d-hei dim-input" placeholder="H" onblur="formatDecimal(this,2); tryResolveCustomSize(this)">
              </div>
           </td>
-          <td><input type="number" step="0.0001" class="d-avgwt w-full text-center font-mono" placeholder="0.0000" oninput="recalcTotals()" onblur="formatDecimal(this,4)"></td>
+          <td><input type="number" step="0.0001" class="d-avgwt w-full text-center font-mono" placeholder="0.0000" oninput="recalcTotals()" onblur="formatDecimal(this,4); tryResolveCustomSize(this)"></td>
           <td><input type="number" class="d-qty w-full text-center" placeholder="0" oninput="recalcTotals()"></td>
           <td><input type="number" step="0.001" class="d-tot w-full text-center bg-slate-100 font-bold font-mono" readonly tabindex="-1"></td>
           <td><select class="d-set w-full text-center">${getDropdownOptions(dropdownData.settings, "Setting")}</select></td>
@@ -740,6 +740,76 @@
         avgWtInput.value = entry.wt.toFixed(4);
       }
       recalcTotals();
+    }
+
+    // A "standard" row's size dropdown includes "Custom / Other Size..."
+    // for a genuinely one-off stone (e.g. a 3ct center stone with no
+    // catalog entry). But designers also land here for ordinary melee —
+    // typing "0.017" as the average weight instead of finding it in the
+    // dropdown — and that got saved as SizeIdx: "custom" even though
+    // 0.017ct is a completely standard 1.6mm round in the shared size
+    // catalog. Downstream (the JWY Calculator), "custom" means "no
+    // catalog match, price this by hand" — so a melee row typed this way
+    // silently lost its price-grid pricing.
+    //
+    // This runs on blur of the manual L/W/H or avg-weight fields, only
+    // while a standard row is in Custom mode. It checks the typed
+    // value(s) against that row's shape entries in shapeSizeData and, on
+    // a match, snaps the row back onto the matching dropdown entry
+    // (restoring SizeIdx to a real index) instead of leaving it flagged
+    // custom. If nothing matches, the row is left alone — that's a
+    // genuine custom size and SizeIdx stays "custom".
+    function tryResolveCustomSize(triggerInput) {
+      const row = triggerInput.closest('tr');
+      if (!row || row.dataset.rowMode === 'custom') return; // free-text row type — no catalog concept here at all
+      const sizeSelect = row.querySelector('.d-size');
+      if (!sizeSelect || sizeSelect.value !== 'custom') return; // only relevant while flagged custom
+
+      const shape = row.querySelector('.d-shape').value;
+      const entries = shapeSizeData[shape] || [];
+      if (entries.length === 0) return; // shape has no catalog sizes at all (e.g. Single Cut) — nothing to resolve against
+
+      const len = parseFloat(row.querySelector('.d-len').value);
+      const wid = parseFloat(row.querySelector('.d-wid').value);
+      const hei = parseFloat(row.querySelector('.d-hei').value);
+      const wt = parseFloat(row.querySelector('.d-avgwt').value);
+
+      // Tolerances: mm entries are stored to 2dp, weights to 3-4 sig figs
+      // in the catalog — small enough to treat a match as intentional,
+      // not coincidental (e.g. typing 3.00 shouldn't fuzzy-match 2.99).
+      const DIM_TOL = 0.02;
+      const WT_TOL = 0.0015;
+
+      let matchIdx = -1;
+      for (let i = 0; i < entries.length; i++) {
+        const dimsPart = entries[i].size.split('(')[0];
+        const nums = (dimsPart.match(/[\d.]+/g) || []).map(Number);
+        const eL = nums[0], eW = nums[1], eH = nums[2];
+        const entryWt = entries[i].wt;
+
+        const dimsGiven = !isNaN(len) || !isNaN(wid) || !isNaN(hei);
+        const dimsMatch = dimsGiven
+          ? (isNaN(len) || eL === undefined ? true : Math.abs(len - eL) <= DIM_TOL)
+            && (isNaN(wid) || eW === undefined ? true : Math.abs(wid - eW) <= DIM_TOL)
+            && (isNaN(hei) || eH === undefined ? true : Math.abs(hei - eH) <= DIM_TOL)
+          : false;
+        const wtMatch = !isNaN(wt) && entryWt !== null && entryWt !== undefined && Math.abs(wt - entryWt) <= WT_TOL;
+
+        // Match on EITHER a dimension match or a weight match — a melee
+        // typed as just a weight (the reported case) never fills L/W/H,
+        // so dimension matching alone would miss it; a stone typed as
+        // just dimensions (no weight yet) should resolve the same way.
+        if (dimsMatch || wtMatch) { matchIdx = i; break; }
+      }
+
+      if (matchIdx === -1) return; // no catalog match — genuinely custom, leave as-is
+
+      // Snap back onto the matched dropdown entry: restores SizeIdx to a
+      // real index and refills L/W/H + avg weight from the catalog record
+      // (via the same path a manual dropdown pick uses), then hides the
+      // manual fields again since this is no longer "custom".
+      sizeSelect.value = String(matchIdx);
+      onSizeChange(sizeSelect);
     }
 
     function removeRow(btn) { btn.closest('tr').remove(); recalcTotals(); }
@@ -884,7 +954,13 @@
       });
 
       derived['_STONE_QTY']      = totalQty > 0 ? (totalQty % 1 === 0 ? totalQty.toFixed(0) : String(totalQty)) : '';
-      derived['_STONE_TYPES']    = types.join(', ');
+      // Summarized like _METAL_TYPE_COMBINED ("14KT + 18KT") rather than a
+      // plain comma list — e.g. a job with both a Mined center stone and
+      // Lab grown melee now reads "Mined + Lab grown" in one field, so
+      // downstream consumers (JWY Calculator, reports) get a single
+      // human-readable stone-type summary per job instead of having to
+      // parse a list.
+      derived['_STONE_TYPES']    = types.join(' + ');
       derived['_STONE_SOURCES']  = sources.join(', ');
       derived['_STONE_SETTINGS'] = settings.join(', ');
 
