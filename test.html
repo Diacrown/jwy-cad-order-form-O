@@ -1171,6 +1171,19 @@
     }
 
 
+    // Security: data read back out of an imported PDF is untrusted. Only raster
+    // image data URLs (what the upload inputs produce) and finite numeric ids
+    // are accepted; anything else is silently skipped before it can reach the
+    // innerHTML templates in renderImageTabs / renderClientRefImages.
+    function sanitizeImageDataUrl(v) {
+        return (typeof v === 'string' && /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(v)) ? v : null;
+    }
+    function sanitizeImageId(v) {
+        if (typeof v !== 'number' && !(typeof v === 'string' && v.trim() !== '')) return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    }
+
     function populateForm(data) {
         const form = document.getElementById('cadForm');
         for (const k in data) {
@@ -1181,19 +1194,26 @@
             }
         }
         
-        if(data._VERSIONS && data._VERSIONS.length > 0) {
+        if(Array.isArray(data._VERSIONS) && data._VERSIONS.length > 0) {
             // Only one CAD image slot now — take the first entry with a
             // dataUrl (older multi-image JSON/PDF exports may still have
             // several; we only keep the first one to match the current form).
-            const firstWithImage = data._VERSIONS.find(v => v.dataUrl) || data._VERSIONS[0];
-            imageVersions = [{ id: 1, dataUrl: firstWithImage.dataUrl || null, fileObj: null, locked: !!firstWithImage.dataUrl }];
+            const safeDataUrl = data._VERSIONS.map(v => v && sanitizeImageDataUrl(v.dataUrl)).find(Boolean) || null;
+            imageVersions = [{ id: 1, dataUrl: safeDataUrl, fileObj: null, locked: !!safeDataUrl }];
             renderImageTabs();
         }
 
-        if(data._CLIENT_REF_IMAGES && data._CLIENT_REF_IMAGES.length > 0) {
-            clientRefImages = data._CLIENT_REF_IMAGES;
-            clientRefCounter = Math.max(...clientRefImages.map(i => i.id));
-            renderClientRefImages();
+        if(Array.isArray(data._CLIENT_REF_IMAGES) && data._CLIENT_REF_IMAGES.length > 0) {
+            const safeRefs = [];
+            data._CLIENT_REF_IMAGES.forEach(img => {
+                const id = img ? sanitizeImageId(img.id) : null;
+                if (id !== null) safeRefs.push({ id: id, dataUrl: sanitizeImageDataUrl(img.dataUrl) });
+            });
+            if (safeRefs.length > 0) {
+                clientRefImages = safeRefs;
+                clientRefCounter = Math.max(...clientRefImages.map(i => i.id));
+                renderClientRefImages();
+            }
         }
 
         const stoneTbody = document.getElementById('diamondTableBody');
