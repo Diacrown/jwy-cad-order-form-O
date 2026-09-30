@@ -993,7 +993,7 @@
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-      const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+      const pdf = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
       const numPages = pdf.numPages;
       const pngBlobs = [];
 
@@ -1540,7 +1540,7 @@
             reader.onload = async function() {
                 try {
                     if(typeof pdfjsLib === 'undefined') { alert("PDF processor not ready. Please refresh."); return; }
-                    const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+                    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(this.result), isEvalSupported: false }).promise;
 
                     let fullText = '';
                     for (let pNum = 1; pNum <= pdf.numPages; pNum++) {
