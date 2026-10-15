@@ -3,6 +3,7 @@
 <head>
   <base target="_top">
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAD Order Form</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -25,6 +26,81 @@
     .remove-btn { color: #dc2626; cursor: pointer; font-weight: bold; background: none; border: none; }
     .dim-input { width: 3.5rem; text-align: center; border-bottom: 1px solid #94a3b8 !important; margin: 0 2px; }
     
+
+    /* ======================= RESPONSIVE (screen only) =======================
+       Desktop (>=1024px) is unchanged. Below that the form reflows for tablets/phones.
+       Everything is inside @media screen so printing and the PDF are not affected. */
+    @media screen and (max-width: 1023px) {
+      /* 16px fields: iOS Safari zooms the whole page when a smaller field is focused */
+      .excel-table input, .excel-table select { font-size: 16px; min-height: 36px; }
+      .remove-btn { font-size: 18px; padding: 6px 8px; }
+
+      /* ---- Gemstone table -> one card per stone ---- */
+      #diamondTable, #diamondTable tbody { display: block; width: 100%; }
+      #diamondTable thead { display: none; }
+      #diamondTable tr.d-row { display: flex; flex-wrap: wrap; position: relative; margin: 16px 12px 10px; padding: 6px 2px 4px; border: 1px solid #94a3b8; border-radius: 8px; }
+      #diamondTable td { display: block; box-sizing: border-box; flex: 1 1 50%; max-width: 50%; min-width: 0; border: 0; padding: 4px 6px; text-align: left; white-space: normal; font-size: 0.85rem; }
+      #diamondTable td::before { display: block; font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
+      #diamondTable td:nth-child(1)::before { content: "Position"; }
+      #diamondTable td:nth-child(2)::before { content: "Stone"; }
+      #diamondTable td:nth-child(3)::before { content: "Shape"; }
+      #diamondTable td:nth-child(4)::before { content: "MM Size (L x W x H)"; }
+      #diamondTable td:nth-child(5)::before { content: "Avg Dia Wt (ct/pc)"; }
+      #diamondTable td:nth-child(6)::before { content: "Dia. Qty"; }
+      #diamondTable td:nth-child(7)::before { content: "Total Wt (auto)"; }
+      #diamondTable td:nth-child(8)::before { content: "Setting"; }
+      #diamondTable td:nth-child(9)::before { content: "Diamond Source"; }
+      #diamondTable td:nth-child(1), #diamondTable td:nth-child(4) { flex-basis: 100%; max-width: 100%; }
+      #diamondTable td:nth-child(10) { position: absolute; top: -13px; right: -9px; flex: none; max-width: none; width: 30px; height: 30px; padding: 0; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 50%; }
+      #diamondTable td:nth-child(10) .remove-btn { font-size: 14px; padding: 0; line-height: 1; }
+      #diamondTable td:nth-child(10)::before { content: none; }
+      #diamondTable td input, #diamondTable td select { display: block; width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background-color: #fff; font-size: 16px; text-align: left; }
+      #diamondTable td input.d-tot { background-color: #f1f5f9; }
+      #diamondTable td select.d-pos { background-color: #eff6ff; }
+      #diamondTable td select.d-size { font-size: 14px; }
+      #diamondTable td input.dim-input { display: inline-block; width: 28%; margin: 0 2px; text-align: center; }
+      #diamondTable td .d-dims-manual { margin-top: 0; justify-content: flex-start; }
+      #diamondTable td .d-dims-manual.hidden { display: none; }
+      #diamondTable td select.hidden { display: none; }
+
+      /* ---- Reference images: two per row ---- */
+      #clientRefContainer > div { width: calc(50% - 6px); height: 150px; }
+      div.jc-cadcol { border-right: 0; border-bottom: 1px solid #000; }
+    }
+    @media screen and (min-width: 640px) and (max-width: 1023px) {
+      #diamondTable td { flex-basis: 33.333%; max-width: 33.333%; }
+      #diamondTable td:nth-child(4) { flex-basis: 66.666%; max-width: 66.666%; }
+      #diamondTable td:nth-child(10) { max-width: none; }
+      #clientRefContainer > div { width: 10rem; height: 10rem; }
+    }
+    @media screen and (max-width: 767px) {
+      /* ---- Top row: Job | Item / SKU / Request | Ship ---- */
+      .jc-top, .jc-top tbody { display: block; width: 100%; }
+      .jc-top tr { display: flex; flex-wrap: wrap; }
+      .jc-top td { box-sizing: border-box; flex: 1 1 50%; width: auto; min-width: 0; border: 0; border-right: 1px solid #000; border-bottom: 1px solid #000; }
+      .jc-top td:nth-child(3) { flex-basis: 100%; }
+      .jc-top td:nth-child(2), .jc-top td:nth-child(3), .jc-top td:nth-child(5) { border-right: 0; }
+      .jc-top td input { min-width: 0; }
+
+      /* spec table: narrower label column so the Metal selects (18KT / YG / -) are not clipped */
+      .jc-spec td:first-child { width: 33%; }
+      .jc-spec td:nth-child(2) { width: 67%; }
+      .jc-spec td.flex select { padding-left: 2px; padding-right: 0; }
+
+      /* CAD image on top, a bit shorter; spec table below */
+      div.jc-cadcol { min-height: 300px; }
+
+      /* ---- Bottom summary ---- */
+      .jc-summary, .jc-summary tbody { display: block; width: 100%; }
+      .jc-summary tr { display: flex; flex-wrap: wrap; }
+      .jc-summary td { box-sizing: border-box; flex: 1 1 50%; width: auto; }
+      .jc-summary td:nth-child(3) { flex-basis: 100%; }
+      .jc-summary td select { width: 60%; max-width: 220px; }
+
+      /* ---- Client instructions field goes on its own line ---- */
+      .excel-table input[name="Client Notes"] { display: block; width: 100%; margin: 6px 0 0; }
+    }
+
     @media print {
       body { background: white !important; padding: 0 !important; }
       .print-hidden { display: none !important; }
@@ -48,10 +124,10 @@
 
   <div id="jobCardWrapper" class="max-w-6xl mx-auto bg-white p-4 md:p-8 rounded shadow-lg border border-slate-300 relative">
     
-    <header class="flex justify-between items-center mb-6">
+    <header class="flex flex-wrap justify-between items-center gap-3 mb-6">
       <div class="flex items-center gap-3 print-hidden-buttons">
         <img id="ws-logo-header" alt="Made with Love" class="h-6 w-auto">
-        <h1 class="text-2xl font-extrabold tracking-tight text-slate-900">CAD Order Form</h1>
+        <h1 class="text-xl md:text-2xl font-extrabold tracking-tight text-slate-900">CAD Order Form</h1>
       </div>
       <div class="flex gap-2 print-hidden">
         <input type="file" id="pdf-upload" class="hidden" accept=".pdf">
@@ -63,7 +139,7 @@
 
     <form id="cadForm">
       <div id="visual-job-card" class="bg-white" style="border: 2px solid #000;">
-        <table class="excel-table border-0 w-full">
+        <table class="excel-table jc-top border-0 w-full">
           <tr>
             <td class="w-[20%] font-black-strong border-l-0">
               <span class="block text-[10px] text-slate-500 font-normal">Job No:</span>
@@ -88,14 +164,14 @@
           </tr>
         </table>
 
-        <div class="flex flex-col md:flex-row border-t border-black">
-          <div class="w-full md:w-2/3 p-4 flex flex-col border-r border-black bg-white min-h-[400px]">
+        <div class="flex flex-col lg:flex-row border-t border-black">
+          <div class="jc-cadcol w-full lg:w-2/3 p-4 flex flex-col border-r border-black bg-white min-h-[400px]">
              <div id="tab-content-container" class="flex-grow relative border-2 border-dashed border-blue-300 p-2 flex flex-col items-center justify-center group hover:bg-blue-50 transition-colors print-hidden"></div>
              <img id="pdfImgMain" class="hidden print-block max-h-96 w-full object-contain mx-auto mt-2">
           </div>
 
-          <div class="w-full md:w-1/3 flex flex-col">
-            <table class="excel-table border-0 w-full h-full flex-grow" style="border:none;">
+          <div class="w-full lg:w-1/3 flex flex-col">
+            <table class="excel-table jc-spec border-0 w-full h-full flex-grow" style="border:none;">
               <tr><td class="w-[40%] font-black-strong">Vendor SKU:</td><td class="w-[60%]"><input type="text" name="VendorItemNo"></td></tr>
               <tr>
                 <td class="font-black-strong bg-blue-hl">Metal 1</td>
@@ -181,6 +257,8 @@
           <div class="p-2 print-hidden bg-slate-50 flex gap-2">
             <button type="button" onclick="addDiamondRow('standard')" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-1 px-3 rounded text-xs transition-all">+ Standard Row</button>
             <button type="button" onclick="addDiamondRow('custom')" class="bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold py-1 px-3 rounded text-xs transition-all">+ Custom Row</button>
+            <button type="button" id="csvImportBtn" title="Fill the stone rows from a CAD gem report saved as CSV" class="bg-green-100 hover:bg-green-200 text-green-800 font-bold py-1 px-3 rounded text-xs transition-all">&#128229; Import CSV</button>
+            <input type="file" id="csvImportFile" accept=".csv,.txt,text/csv" class="hidden">
           </div>
         </div>
 
@@ -194,7 +272,7 @@
           </div>
         </div>
 
-        <table class="excel-table border-0 w-full border-t-2 border-black">
+        <table class="excel-table jc-summary border-0 w-full border-t-2 border-black">
           <tr>
             <td class="border-0 font-black-strong py-2 w-[30%]">No. of s: <span id="sumQty" class="font-normal ml-2">0</span></td>
             <td class="border-0 font-black-strong py-2 w-[30%]">Total Wt: <span id="sumWt" class="font-normal ml-2">0.00</span> ct</td>
@@ -205,6 +283,7 @@
                 <option value="Sudip">Sudip</option>
                 <option value="Aakash">Aakash</option>
                 <option value="Omkar">Omkar</option>
+                <option value="Priyanka">Priyanka</option>
               </select>
             </td>
           </tr>
@@ -1825,6 +1904,375 @@
             for(let i=0; i<5; i++) addDiamondRow('standard');
         }
     }
+
+    // ============================================================================
+    // CSV STONE IMPORT  (additive and self-contained)
+    //
+    // Lets a designer fill the Gemstone table from a CAD gem report exported as
+    // CSV (e.g. columns: Material, Shape-Cut, W x L x D, Count, Carats per unit,
+    // Carats) instead of typing every row.
+    //
+    // It does NOT change any existing function. It only calls the form's own
+    // addDiamondRow / onShapeChange / onSizeChange / recalcTotals, i.e. it
+    // does what a designer does by hand, so every row is a normal row: it is saved
+    // to the PDF/JSON and re-imported exactly like a hand-typed one.
+    //
+    // Rules
+    //  * Existing rows that already contain data are never touched or removed.
+    //    Empty rows are reused first; further rows are appended.
+    //  * Shape-Cut "BaguetteStraight-Diamond" -> shape "Baguette" (the text after
+    //    the dash is the gem type; it only sets Stone if it is a coloured stone
+    //    that exists in the Stone list, e.g. "Ruby").
+    //  * The Material column (e.g. "Pearl White") is a CAD render material, not a
+    //    stone type, so it is ignored. Stone/Position/Setting/Source can be chosen
+    //    once for the whole import in the preview window.
+    //  * W x L x D: the two face dimensions are put longer-side-first as Length/Width, D is Height. If they match a size in the shared catalog (same +/-0.02 mm
+    //    tolerance the form already uses) the row is set to that dropdown entry
+    //    (so its catalog weight is used); otherwise it is a "Custom / Other Size".
+    //  * Carats per unit (or Carats / Count) is used when present; otherwise the
+    //    catalog weight is used, otherwise the row is flagged "enter weight".
+    //  * Anything unexpected shows a message and leaves the form untouched.
+    // ============================================================================
+    (function csvStoneImport() {
+      const btn = document.getElementById('csvImportBtn');
+      const fileInput = document.getElementById('csvImportFile');
+      if (!btn || !fileInput) return;
+
+      const DIM_TOL = 0.02; // same tolerance as tryResolveCustomSize
+      const norm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const fmt2 = (n) => (n === undefined || n === null || isNaN(n) ? '' : Number(n).toFixed(2));
+
+      // ---------- CSV parsing ----------
+      function detectDelimiter(text) {
+        const lines = text.split(/\r?\n/);
+        let first = '';
+        for (let i = 0; i < lines.length; i++) { if (lines[i].trim() !== '') { first = lines[i]; break; } }
+        const counts = { ',': 0, ';': 0, '\t': 0 };
+        let inQ = false;
+        for (let i = 0; i < first.length; i++) {
+          const ch = first.charAt(i);
+          if (ch === '"') inQ = !inQ;
+          else if (!inQ && counts[ch] !== undefined) counts[ch]++;
+        }
+        let best = ',';
+        Object.keys(counts).forEach((k) => { if (counts[k] > counts[best]) best = k; });
+        return best;
+      }
+
+      function parseCsv(text, delim) {
+        const rows = [];
+        let row = [], cur = '', inQ = false;
+        for (let i = 0; i < text.length; i++) {
+          const ch = text.charAt(i);
+          if (inQ) {
+            if (ch === '"') { if (text.charAt(i + 1) === '"') { cur += '"'; i++; } else inQ = false; }
+            else cur += ch;
+          } else if (ch === '"') {
+            inQ = true;
+          } else if (ch === delim) {
+            row.push(cur); cur = '';
+          } else if (ch === '\n' || ch === '\r') {
+            if (ch === '\r' && text.charAt(i + 1) === '\n') i++;
+            row.push(cur); cur = ''; rows.push(row); row = [];
+          } else {
+            cur += ch;
+          }
+        }
+        if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+        return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
+      }
+
+      const COLS = {
+        shape: ['shapecut', 'shape', 'cut', 'shapeandcut'],
+        dims: ['wxlxd', 'lxwxh', 'wxl', 'dimensions', 'dimension', 'mmsize', 'size'],
+        count: ['count', 'qty', 'quantity', 'pcs', 'nos', 'diaqty'],
+        perUnit: ['caratsperunit', 'caratperunit', 'ctsperunit', 'ctperpc', 'avgwt', 'avgdiawt', 'ctspc'],
+        carats: ['carats', 'carat', 'cts', 'ct', 'totalcarats', 'totalwt', 'totalweight'],
+      };
+      function findCol(headers, names) {
+        for (let i = 0; i < headers.length; i++) { if (names.indexOf(norm(headers[i])) !== -1) return i; }
+        return -1;
+      }
+
+      // ---------- mapping to the form's own lists ----------
+      const SHAPE_ALIASES = {
+        round: 'Round', roundbrilliant: 'Round', brilliant: 'Round',
+        baguette: 'Baguette', baguettestraight: 'Baguette', straightbaguette: 'Baguette',
+        baguettetapered: 'Tappered Bagguette', taperedbaguette: 'Tappered Bagguette', tapperedbagguette: 'Tappered Bagguette',
+        princess: 'Princess', carre: 'Carre', emerald: 'Emerald', heart: 'Heart', marquise: 'Marquise',
+        oval: 'Oval', pear: 'Pear', radiant: 'Radiant', cushion: 'Cushion',
+        squarecushion: 'Sq. Cushion', sqcushion: 'Sq. Cushion', squareemerald: 'Sq. Emerald', sqemerald: 'Sq. Emerald',
+        triangle: 'Triangle', trilliant: 'Trilliant', trillion: 'Trilliant', kite: 'Kite', trapezoid: 'Trapezoid',
+        asscher: 'Asscher', halfmoon: 'Half moon', hexagon: 'Hexagon', singlecut: 'Single Cut',
+      };
+
+      function mapShapeCell(raw) {
+        const s = String(raw || '').trim();
+        const dash = s.indexOf('-');
+        const shapePart = dash >= 0 ? s.slice(0, dash).trim() : s;
+        const gemPart = dash >= 0 ? s.slice(dash + 1).trim() : '';
+        const key = norm(shapePart);
+        let shape = SHAPE_ALIASES[key] || '';
+        if (!shape) dropdownData.shapes.forEach((sh) => { if (norm(sh) === key) shape = sh; });
+        let stone = '';
+        const gkey = norm(gemPart);
+        if (gkey) dropdownData.stoneTypes.forEach((st) => { if (norm(st) === gkey) stone = st; });
+        return { shape: shape, shapeText: shapePart, stone: stone };
+      }
+
+      function findCatalogIdx(shape, dims) {
+        const entries = shapeSizeData[shape] || [];
+        if (!dims.length) return -1;
+        for (let i = 0; i < entries.length; i++) {
+          const nums = (entries[i].size.split('(')[0].match(/[\d.]+/g) || []).map(Number);
+          if (!nums.length) continue;
+          if (Math.abs(dims[0] - nums[0]) > DIM_TOL) continue;
+          if (nums[1] !== undefined && (dims[1] === undefined || Math.abs(dims[1] - nums[1]) > DIM_TOL)) continue;
+          if (nums[2] !== undefined && (dims[2] === undefined || Math.abs(dims[2] - nums[2]) > DIM_TOL)) continue;
+          return i;
+        }
+        return -1;
+      }
+
+      function toNum(v) {
+        const n = parseFloat(String(v == null ? '' : v).replace(/,/g, '.').replace(/[^\d.\-]/g, ''));
+        return isNaN(n) ? null : n;
+      }
+
+      function buildRecords(table) {
+        const headers = table[0];
+        const cShape = findCol(headers, COLS.shape);
+        const cDims = findCol(headers, COLS.dims);
+        const cCount = findCol(headers, COLS.count);
+        const cPer = findCol(headers, COLS.perUnit);
+        const cCar = findCol(headers, COLS.carats);
+        if (cShape === -1) {
+          throw new Error('Could not find a "Shape-Cut" (or "Shape") column in the first row of this file.');
+        }
+        const recs = [], skipped = [];
+        for (let r = 1; r < table.length; r++) {
+          const line = table[r];
+          const cell = (c) => (c === -1 ? '' : String(line[c] == null ? '' : line[c]).trim());
+          const rawShape = cell(cShape);
+          if (!rawShape && !cell(cDims) && !cell(cCount)) continue;
+          const m = mapShapeCell(rawShape);
+          const dims = (cell(cDims).replace(/,/g, '.').match(/\d+(?:\.\d+)?/g) || []).map(Number);
+          // CAD writes "W x L x D"; the form (and catalog) list the LONGER side first
+          if (dims.length >= 2 && dims[1] > dims[0]) { const t = dims[0]; dims[0] = dims[1]; dims[1] = t; }
+          const qty = toNum(cell(cCount));
+          let avg = toNum(cell(cPer));
+          const carats = toNum(cell(cCar));
+          if (!(avg > 0) && carats > 0 && qty > 0) avg = carats / qty;
+          const rec = {
+            sourceRow: r + 1, rawShape: rawShape, shape: m.shape, shapeText: m.shapeText, stone: m.stone,
+            dims: dims, qty: qty > 0 ? Math.round(qty) : null, avgWt: avg > 0 ? avg : null,
+            mode: m.shape ? 'standard' : 'custom', matchIdx: -1, catalogLabel: '', catalogWt: null,
+          };
+          if (rec.mode === 'standard') {
+            rec.matchIdx = findCatalogIdx(rec.shape, dims);
+            if (rec.matchIdx >= 0) {
+              const e = shapeSizeData[rec.shape][rec.matchIdx];
+              rec.catalogLabel = e.size.split('(')[0].trim();
+              rec.catalogWt = (e.wt !== null && e.wt !== undefined) ? e.wt : null;
+            }
+          }
+          if (!rec.qty && !dims.length && !rec.shape) { skipped.push(r + 1); continue; }
+          recs.push(rec);
+        }
+        return { recs: recs, skipped: skipped };
+      }
+
+      // ---------- writing rows into the form (uses the form's own functions) ----------
+      function setSel(el, val) { if (!el || !val) return; el.value = val; }
+
+      function fillRow(row, rec, d) {
+        const q = (sel) => row.querySelector(sel);
+        setSel(q('.d-pos'), d.pos);
+        setSel(q('.d-stone'), rec.stone || d.stone);
+        setSel(q('.d-set'), d.setting);
+        setSel(q('.d-source'), d.source);
+
+        const setDims = () => {
+          if (rec.dims[0] !== undefined) q('.d-len').value = fmt2(rec.dims[0]);
+          if (rec.dims[1] !== undefined) q('.d-wid').value = fmt2(rec.dims[1]);
+          if (rec.dims[2] !== undefined) q('.d-hei').value = fmt2(rec.dims[2]);
+        };
+
+        if (rec.mode === 'custom') {
+          // shape not in the form's list: keep the raw text in a free-text row, designer corrects it
+          q('.d-shape').value = rec.shapeText;
+          setDims();
+        } else {
+          const shapeSel = q('.d-shape');
+          shapeSel.value = rec.shape;
+          onShapeChange(shapeSel);
+          const sizeSel = q('.d-size');
+          const hasCatalog = (shapeSizeData[rec.shape] || []).length > 0;
+          if (!hasCatalog) {
+            setDims();
+          } else if (rec.matchIdx >= 0) {
+            sizeSel.value = String(rec.matchIdx);
+            onSizeChange(sizeSel);                       // fills L/W/H + catalog weight, exactly like a manual pick
+          } else {
+            sizeSel.value = 'custom';
+            onSizeChange(sizeSel);                       // shows the manual L/W/H boxes
+            setDims();
+          }
+        }
+        if (rec.qty) q('.d-qty').value = String(rec.qty);
+        if (rec.avgWt) q('.d-avgwt').value = rec.avgWt.toFixed(4);
+      }
+
+      function isEmptyStandardRow(row) {
+        if (row.dataset.rowMode === 'custom') return false;
+        return ['.d-stone', '.d-shape', '.d-qty', '.d-avgwt', '.d-len', '.d-wid', '.d-hei', '.d-set', '.d-source'].every((sel) => {
+          const el = row.querySelector(sel);
+          return !el || el.value === '';
+        });
+      }
+
+      function applyRecords(recs, d) {
+        const tbody = document.getElementById('diamondTableBody');
+        const spare = Array.prototype.slice.call(tbody.querySelectorAll('.d-row')).filter(isEmptyStandardRow);
+        let n = 0;
+        recs.forEach((rec) => {
+          let row = null;
+          if (rec.mode === 'standard' && spare.length) {
+            row = spare.shift();
+          } else {
+            addDiamondRow(rec.mode);
+            row = tbody.lastElementChild;
+          }
+          fillRow(row, rec, d);
+          n++;
+        });
+        recalcTotals();
+        return n;
+      }
+
+      // ---------- preview window ----------
+      function closePreview() {
+        const old = document.getElementById('csvImportModal');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+      }
+
+      function optionsHtml(list, selected, blankLabel) {
+        let h = blankLabel !== undefined ? '<option value="">' + esc(blankLabel) + '</option>' : '';
+        list.forEach((o) => { h += '<option value="' + esc(o) + '"' + (o === selected ? ' selected' : '') + '>' + esc(o) + '</option>'; });
+        return h;
+      }
+
+      function describe(rec) {
+        const dimsTxt = rec.dims.map(fmt2).join(' x ') || '-';
+        const wt = rec.avgWt || rec.catalogWt;
+        let status, cls;
+        if (rec.mode === 'custom') { status = 'Shape "' + rec.shapeText + '" not in the list: added as a custom row, please check'; cls = 'text-red-700'; }
+        else if (rec.matchIdx >= 0) { status = 'Catalog size: ' + rec.catalogLabel + (wt ? '' : ' (no catalog weight, enter weight)'); cls = 'text-green-700'; }
+        else if ((shapeSizeData[rec.shape] || []).length === 0) { status = 'Manual size (this shape has no catalog)' + (wt ? '' : ', enter weight'); cls = 'text-amber-700'; }
+        else { status = 'Custom size (not in catalog)' + (wt ? '' : ', enter weight'); cls = 'text-amber-700'; }
+        return { dimsTxt: dimsTxt, wt: wt, status: status, cls: cls };
+      }
+
+      function showPreview(fileName, result) {
+        closePreview();
+        const recs = result.recs;
+        const firstPos = document.querySelector('#diamondTableBody .d-pos');
+        const posList = firstPos ? Array.prototype.map.call(firstPos.options, (o) => o.value) : ['Accent stones', 'Center', 'Halo', 'Hidden Halo', 'Inside', 'Side', 'Stones on Rail', 'Stones on shank'];
+        const totalQty = recs.reduce((s, r) => s + (r.qty || 0), 0);
+        const nCat = recs.filter((r) => r.matchIdx >= 0).length;
+        const nNeedWt = recs.filter((r) => !(r.avgWt || r.catalogWt)).length;
+
+        let rowsHtml = '';
+        recs.forEach((rec, i) => {
+          const d = describe(rec);
+          rowsHtml += '<tr class="border-t border-slate-200">' +
+            '<td class="px-2 py-1 text-slate-400">' + (i + 1) + '</td>' +
+            '<td class="px-2 py-1 font-semibold">' + esc(rec.shape || rec.shapeText) + '</td>' +
+            '<td class="px-2 py-1 whitespace-nowrap">' + esc(d.dimsTxt) + '</td>' +
+            '<td class="px-2 py-1 text-right">' + (rec.qty || '-') + '</td>' +
+            '<td class="px-2 py-1 text-right">' + (d.wt ? Number(d.wt).toFixed(4) : '<span class="text-amber-700">-</span>') + '</td>' +
+            '<td class="px-2 py-1 ' + d.cls + '">' + esc(d.status) + '</td></tr>';
+        });
+
+        const ov = document.createElement('div');
+        ov.id = 'csvImportModal';
+        ov.className = 'print-hidden fixed inset-0 z-[9998] bg-slate-900/60 flex items-center justify-center p-3';
+        ov.innerHTML =
+          '<div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col">' +
+            '<div class="px-4 py-3 border-b border-slate-200 flex items-start justify-between gap-3">' +
+              '<div><div class="font-extrabold text-slate-900">Import stones from CSV</div>' +
+              '<div class="text-xs text-slate-500">' + esc(fileName) + ': ' + recs.length + ' stone rows, ' + totalQty + ' pcs. ' +
+              nCat + ' matched the size catalog' + (nNeedWt ? ', ' + nNeedWt + ' need a weight entered after import' : '') + '.</div></div>' +
+              '<button type="button" id="csvImportClose" class="text-slate-500 hover:text-red-600 text-2xl leading-none">&times;</button>' +
+            '</div>' +
+            '<div class="px-4 py-3 overflow-y-auto text-sm">' +
+              '<div class="text-xs font-bold text-slate-600 mb-1">Apply to all imported rows (optional; you can still change each row afterwards)</div>' +
+              '<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">' +
+                '<label class="text-xs text-slate-500">Position<select id="csvDefPos" class="w-full border border-slate-300 rounded px-2 py-1 text-slate-900">' + optionsHtml(posList, posList[0]) + '</select></label>' +
+                '<label class="text-xs text-slate-500">Stone<select id="csvDefStone" class="w-full border border-slate-300 rounded px-2 py-1 text-slate-900">' + optionsHtml(dropdownData.stoneTypes, '', '- choose later -') + '</select></label>' +
+                '<label class="text-xs text-slate-500">Setting<select id="csvDefSet" class="w-full border border-slate-300 rounded px-2 py-1 text-slate-900">' + optionsHtml(dropdownData.settings, '', '- choose later -') + '</select></label>' +
+                '<label class="text-xs text-slate-500">Diamond Source<select id="csvDefSource" class="w-full border border-slate-300 rounded px-2 py-1 text-slate-900">' + optionsHtml(dropdownData.diamondSources, '', '- choose later -') + '</select></label>' +
+              '</div>' +
+              '<div class="overflow-x-auto border border-slate-200 rounded">' +
+                '<table class="w-full text-xs whitespace-nowrap"><thead class="bg-slate-100 text-slate-600"><tr>' +
+                  '<th class="px-2 py-1 text-left">#</th><th class="px-2 py-1 text-left">Shape</th><th class="px-2 py-1 text-left">L x W x H (mm)</th>' +
+                  '<th class="px-2 py-1 text-right">Qty</th><th class="px-2 py-1 text-right">Avg wt (ct)</th><th class="px-2 py-1 text-left">Result</th>' +
+                '</tr></thead><tbody>' + rowsHtml + '</tbody></table>' +
+              '</div>' +
+              '<div class="text-xs text-slate-500 mt-2">Existing rows that already have data are not changed; empty rows are filled first, then new rows are added. The Material column is not used.</div>' +
+            '</div>' +
+            '<div class="px-4 py-3 border-t border-slate-200 flex justify-end gap-2">' +
+              '<button type="button" id="csvImportCancel" class="px-4 py-2 rounded border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50">Cancel</button>' +
+              '<button type="button" id="csvImportGo" class="px-4 py-2 rounded bg-blue-600 text-white font-bold text-sm hover:bg-blue-700">Import ' + recs.length + ' rows</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(ov);
+
+        const $ = (id) => document.getElementById(id);
+        $('csvImportClose').onclick = closePreview;
+        $('csvImportCancel').onclick = closePreview;
+        ov.addEventListener('click', (e) => { if (e.target === ov) closePreview(); });
+        $('csvImportGo').onclick = function () {
+          const d = { pos: $('csvDefPos').value, stone: $('csvDefStone').value, setting: $('csvDefSet').value, source: $('csvDefSource').value };
+          try {
+            const n = applyRecords(recs, d);
+            closePreview();
+            const tbl = document.getElementById('diamondTable');
+            if (tbl && tbl.scrollIntoView) tbl.scrollIntoView({ block: 'center' });
+            alert('Imported ' + n + ' stone rows.' + (nNeedWt ? '\n\n' + nNeedWt + ' row(s) have no weight yet: please enter the Avg Dia Wt for those.' : '') + '\n\nPlease review the rows before downloading.');
+          } catch (err) {
+            console.error('CSV import failed:', err);
+            closePreview();
+            alert('The CSV import stopped because of an error: ' + err.message + '\n\nSome rows may already have been added. Please check the stone table.');
+          }
+        };
+      }
+
+      // ---------- wiring ----------
+      btn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (ev) => {
+        const file = ev.target.files && ev.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            let text = String(reader.result || '').replace(/^﻿/, '');
+            const table = parseCsv(text, detectDelimiter(text));
+            if (table.length < 2) throw new Error('The file has no data rows.');
+            const result = buildRecords(table);
+            if (!result.recs.length) throw new Error('No stone rows were found in this file.');
+            showPreview(file.name, result);
+          } catch (err) {
+            console.error('CSV read failed:', err);
+            alert('Could not read this CSV: ' + err.message);
+          }
+          fileInput.value = '';
+        };
+        reader.onerror = () => { alert('Could not read that file.'); fileInput.value = ''; };
+        reader.readAsText(file);
+      });
+    })();
   </script>
 
 </body>
