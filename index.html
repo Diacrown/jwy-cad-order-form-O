@@ -695,8 +695,8 @@
       if (mode === 'custom') {
         tr.innerHTML = `
           ${posCell}
-          <td><input type="text" class="d-stone w-full text-center" placeholder="Type stone..."></td>
-          <td><input type="text" class="d-shape w-full text-center" placeholder="Type shape..."></td>
+          <td><select class="d-stone w-full text-center">${getDropdownOptions(dropdownData.stoneTypes, "Type")}</select></td>
+          <td><select class="d-shape w-full text-center">${getDropdownOptions(dropdownData.shapes, "Shape")}</select></td>
           <td class="whitespace-nowrap border-0 p-1">
              <div class="d-dims-manual flex flex-row justify-center items-center gap-1 mt-1">
                <input type="number" step="0.01" class="d-len dim-input" placeholder="L" onblur="formatDecimal(this,2)">x
@@ -707,8 +707,8 @@
           <td><input type="number" step="0.0001" class="d-avgwt w-full text-center font-mono" placeholder="0.0000" oninput="recalcTotals()" onblur="formatDecimal(this,4)"></td>
           <td><input type="number" class="d-qty w-full text-center" placeholder="0" oninput="recalcTotals()"></td>
           <td><input type="number" step="0.001" class="d-tot w-full text-center bg-slate-100 font-bold font-mono" readonly tabindex="-1"></td>
-          <td><input type="text" class="d-set w-full text-center" placeholder="Setting..."></td>
-          <td class="border-r-0"><input type="text" class="d-source w-full text-center" placeholder="Source..."></td>
+          <td><select class="d-set w-full text-center">${getDropdownOptions(dropdownData.settings, "Setting")}</select></td>
+          <td class="border-r-0"><select class="d-source w-full text-center">${getDropdownOptions(dropdownData.diamondSources, "Source")}</select></td>
           <td class="border-r-0 print-hidden"><button type="button" class="remove-btn" onclick="removeRow(this)">❌</button></td>
         `;
       } else {
@@ -775,7 +775,8 @@
       entries.forEach((e, idx) => {
         html += `<option value="${idx}">${e.size}${e.wt !== null ? ' - ' + e.wt + 'ct' : ''}</option>`;
       });
-      html += '<option value="custom">Custom / Other Size...</option>';
+      // "Custom / Other Size..." is intentionally not offered on standard rows any more:
+      // one-off sizes are entered on a Custom row instead (+ Custom Row).
       sizeSelect.innerHTML = html;
     }
 
@@ -1856,6 +1857,19 @@
                 const rowMode = s.Mode === 'custom' ? 'custom' : 'standard';
                 addDiamondRow(rowMode);
                 const row = stoneTbody.lastElementChild;
+                if (rowMode === 'custom') {
+                  // Custom rows used to take free text for these four fields. A saved value that is
+                  // not in the dropdown list is kept as an extra option on this row so nothing is lost.
+                  [['.d-stone', s.Stone], ['.d-shape', s.Shape], ['.d-set', s.Set], ['.d-source', s.Source]].forEach(function (pair) {
+                    const sel = row.querySelector(pair[0]);
+                    const val = pair[1];
+                    if (sel && val && sel.tagName === 'SELECT' && !Array.prototype.some.call(sel.options, function (o) { return o.value === val; })) {
+                      const o = document.createElement('option');
+                      o.value = val; o.textContent = val;
+                      sel.appendChild(o);
+                    }
+                  });
+                }
                 if(s.Pos) row.querySelector('.d-pos').value = s.Pos;
                 if(s.Stone) row.querySelector('.d-stone').value = s.Stone;
                 if(s.Shape) {
@@ -1864,6 +1878,15 @@
                 }
                 let sizeIdxRestored = false;
                 if(rowMode === 'standard' && s.SizeIdx !== undefined && s.SizeIdx !== '' && row.querySelector('.d-size')) {
+                  // Jobs saved before the option was retired may carry SizeIdx "custom":
+                  // add the option back for that row only so the saved value (and its
+                  // L/W/H) loads exactly as before instead of being lost.
+                  if (String(s.SizeIdx) === 'custom' && !row.querySelector('.d-size option[value="custom"]') && row.querySelector('.d-size').options.length > 0) {
+                    const legacyOpt = document.createElement('option');
+                    legacyOpt.value = 'custom';
+                    legacyOpt.textContent = 'Custom / Other Size...';
+                    row.querySelector('.d-size').appendChild(legacyOpt);
+                  }
                   row.querySelector('.d-size').value = s.SizeIdx;
                   // <select>.value silently stays '' if s.SizeIdx doesn't match
                   // any current <option> (e.g. the shape's size list changed) —
@@ -1928,7 +1951,7 @@
     //    once for the whole import in the preview window.
     //  * W x L x D: the two face dimensions are put longer-side-first as Length/Width, D is Height. If they match a size in the shared catalog (same +/-0.02 mm
     //    tolerance the form already uses) the row is set to that dropdown entry
-    //    (so its catalog weight is used); otherwise it is a "Custom / Other Size".
+    //    (so its catalog weight is used); otherwise it goes to a Custom row (standard rows only hold catalog sizes).
     //  * Carats per unit (or Carats / Count) is used when present; otherwise the
     //    catalog weight is used, otherwise the row is flagged "enter weight".
     //  * Anything unexpected shows a message and leaves the form untouched.
@@ -2075,6 +2098,10 @@
               const e = shapeSizeData[rec.shape][rec.matchIdx];
               rec.catalogLabel = e.size.split('(')[0].trim();
               rec.catalogWt = (e.wt !== null && e.wt !== undefined) ? e.wt : null;
+            } else {
+              // standard rows only hold catalog sizes; everything else goes to a Custom row
+              rec.mode = 'custom';
+              rec.customReason = (shapeSizeData[rec.shape] || []).length ? 'size' : 'nocatalog';
             }
           }
           if (!rec.qty && !dims.length && !rec.shape) { skipped.push(r + 1); continue; }
@@ -2101,24 +2128,15 @@
 
         if (rec.mode === 'custom') {
           // shape not in the form's list: keep the raw text in a free-text row, designer corrects it
-          q('.d-shape').value = rec.shapeText;
+          setSel(q('.d-shape'), rec.shape);              // dropdown: left blank if the CSV shape is not in our list
           setDims();
         } else {
           const shapeSel = q('.d-shape');
           shapeSel.value = rec.shape;
           onShapeChange(shapeSel);
           const sizeSel = q('.d-size');
-          const hasCatalog = (shapeSizeData[rec.shape] || []).length > 0;
-          if (!hasCatalog) {
-            setDims();
-          } else if (rec.matchIdx >= 0) {
-            sizeSel.value = String(rec.matchIdx);
-            onSizeChange(sizeSel);                       // fills L/W/H + catalog weight, exactly like a manual pick
-          } else {
-            sizeSel.value = 'custom';
-            onSizeChange(sizeSel);                       // shows the manual L/W/H boxes
-            setDims();
-          }
+          sizeSel.value = String(rec.matchIdx);
+          onSizeChange(sizeSel);                         // fills L/W/H + catalog weight, exactly like a manual pick
         }
         if (rec.qty) q('.d-qty').value = String(rec.qty);
         if (rec.avgWt) q('.d-avgwt').value = rec.avgWt.toFixed(4);
@@ -2167,10 +2185,9 @@
         const dimsTxt = rec.dims.map(fmt2).join(' x ') || '-';
         const wt = rec.avgWt || rec.catalogWt;
         let status, cls;
-        if (rec.mode === 'custom') { status = 'Shape "' + rec.shapeText + '" not in the list: added as a custom row, please check'; cls = 'text-red-700'; }
-        else if (rec.matchIdx >= 0) { status = 'Catalog size: ' + rec.catalogLabel + (wt ? '' : ' (no catalog weight, enter weight)'); cls = 'text-green-700'; }
-        else if ((shapeSizeData[rec.shape] || []).length === 0) { status = 'Manual size (this shape has no catalog)' + (wt ? '' : ', enter weight'); cls = 'text-amber-700'; }
-        else { status = 'Custom size (not in catalog)' + (wt ? '' : ', enter weight'); cls = 'text-amber-700'; }
+        if (rec.mode === 'custom' && !rec.shape) { status = 'Shape "' + rec.shapeText + '" not in the list: added as a Custom row, please choose the shape'; cls = 'text-red-700'; }
+        else if (rec.mode === 'custom') { status = 'Not in size catalog: added as a Custom row' + (wt ? '' : ', enter weight'); cls = 'text-amber-700'; }
+        else { status = 'Catalog size: ' + rec.catalogLabel + (wt ? '' : ' (no catalog weight, enter weight)'); cls = 'text-green-700'; }
         return { dimsTxt: dimsTxt, wt: wt, status: status, cls: cls };
       }
 
@@ -2220,7 +2237,7 @@
                   '<th class="px-2 py-1 text-right">Qty</th><th class="px-2 py-1 text-right">Avg wt (ct)</th><th class="px-2 py-1 text-left">Result</th>' +
                 '</tr></thead><tbody>' + rowsHtml + '</tbody></table>' +
               '</div>' +
-              '<div class="text-xs text-slate-500 mt-2">Existing rows that already have data are not changed; empty rows are filled first, then new rows are added. The Material column is not used.</div>' +
+              '<div class="text-xs text-slate-500 mt-2">Sizes found in the catalog go to Standard rows; any other size goes to a Custom row. Existing rows that already have data are not changed; empty rows are filled first, then new rows are added. The Material column is not used.</div>' +
             '</div>' +
             '<div class="px-4 py-3 border-t border-slate-200 flex justify-end gap-2">' +
               '<button type="button" id="csvImportCancel" class="px-4 py-2 rounded border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50">Cancel</button>' +
