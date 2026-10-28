@@ -43,17 +43,18 @@
       #diamondTable td::before { display: block; font-size: 10px; font-weight: 600; color: #64748b; margin-bottom: 2px; }
       #diamondTable td:nth-child(1)::before { content: "Position"; }
       #diamondTable td:nth-child(2)::before { content: "Stone"; }
-      #diamondTable td:nth-child(3)::before { content: "Shape"; }
-      #diamondTable td:nth-child(4)::before { content: "MM Size (L x W x H)"; }
-      #diamondTable td:nth-child(5)::before { content: "Avg Dia Wt (ct/pc)"; }
-      #diamondTable td:nth-child(6)::before { content: "Dia. Qty"; }
-      #diamondTable td:nth-child(7)::before { content: "Total Wt (auto)"; }
-      #diamondTable td:nth-child(8)::before { content: "Setting"; }
-      #diamondTable td:nth-child(9)::before { content: "Diamond Source"; }
-      #diamondTable td:nth-child(1), #diamondTable td:nth-child(4) { flex-basis: 100%; max-width: 100%; }
-      #diamondTable td:nth-child(10) { position: absolute; top: -13px; right: -9px; flex: none; max-width: none; width: 30px; height: 30px; padding: 0; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 50%; }
-      #diamondTable td:nth-child(10) .remove-btn { font-size: 14px; padding: 0; line-height: 1; }
-      #diamondTable td:nth-child(10)::before { content: none; }
+      #diamondTable td:nth-child(3)::before { content: "Studded"; }
+      #diamondTable td:nth-child(4)::before { content: "Shape"; }
+      #diamondTable td:nth-child(5)::before { content: "MM Size (L x W x H)"; }
+      #diamondTable td:nth-child(6)::before { content: "Avg Dia Wt (ct/pc)"; }
+      #diamondTable td:nth-child(7)::before { content: "Dia. Qty"; }
+      #diamondTable td:nth-child(8)::before { content: "Total Wt (auto)"; }
+      #diamondTable td:nth-child(9)::before { content: "Setting"; }
+      #diamondTable td:nth-child(10)::before { content: "Diamond Source"; }
+      #diamondTable td:nth-child(1), #diamondTable td:nth-child(4), #diamondTable td:nth-child(5) { flex-basis: 100%; max-width: 100%; }
+      #diamondTable td:nth-child(11) { position: absolute; top: -13px; right: -9px; flex: none; max-width: none; width: 30px; height: 30px; padding: 0; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 50%; }
+      #diamondTable td:nth-child(11) .remove-btn { font-size: 14px; padding: 0; line-height: 1; }
+      #diamondTable td:nth-child(11)::before { content: none; }
       #diamondTable td input, #diamondTable td select { display: block; width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background-color: #fff; font-size: 16px; text-align: left; }
       #diamondTable td input.d-tot { background-color: #f1f5f9; }
       #diamondTable td select.d-pos { background-color: #eff6ff; }
@@ -69,8 +70,9 @@
     }
     @media screen and (min-width: 640px) and (max-width: 1023px) {
       #diamondTable td { flex-basis: 33.333%; max-width: 33.333%; }
-      #diamondTable td:nth-child(4) { flex-basis: 66.666%; max-width: 66.666%; }
-      #diamondTable td:nth-child(10) { max-width: none; }
+      #diamondTable td:nth-child(4) { flex-basis: 33.333%; max-width: 33.333%; }
+      #diamondTable td:nth-child(5) { flex-basis: 66.666%; max-width: 66.666%; }
+      #diamondTable td:nth-child(11) { max-width: none; }
       #clientRefContainer > div { width: 10rem; height: 10rem; }
     }
     @media screen and (max-width: 767px) {
@@ -246,6 +248,7 @@
                 <tr class="text-center bg-blue-soft font-black-strong">
                   <th class="border-l-0 w-24">Position</th>
                   <th class="w-28">Stone</th>
+                  <th class="w-16">Studded</th>
                   <th class="w-28">Shape</th>
                   <th class="w-44 whitespace-nowrap">MM Size<br><span class="text-[9px] font-normal">(L x W x H)</span></th>
                   <th class="w-20">Avg Dia Wt<br><span class="text-[9px] font-normal">(ct/pc)</span></th>
@@ -715,6 +718,7 @@
         tr.innerHTML = `
           ${posCell}
           <td><select class="d-stone w-full text-center">${getDropdownOptions(dropdownData.stoneTypes, "Type")}</select></td>
+          <td><select class="d-studded w-full text-center"><option value="Yes">Yes</option><option value="No">No</option></select></td>
           <td><select class="d-shape w-full text-center">${getDropdownOptions(dropdownData.shapes, "Shape")}</select></td>
           <td class="whitespace-nowrap border-0 p-1">
              <div class="d-dims-manual flex flex-row justify-center items-center gap-1 mt-1">
@@ -734,6 +738,7 @@
         tr.innerHTML = `
           ${posCell}
           <td><select class="d-stone w-full text-center">${getDropdownOptions(dropdownData.stoneTypes, "Type")}</select></td>
+          <td><select class="d-studded w-full text-center"><option value="Yes">Yes</option><option value="No">No</option></select></td>
           <td><select class="d-shape w-full text-center" onchange="onShapeChange(this)">${getDropdownOptions(dropdownData.shapes, "Shape")}</select></td>
           <td class="whitespace-nowrap border-0 p-1">
              <select class="d-size w-full text-center text-xs" onchange="onSizeChange(this)">
@@ -1008,6 +1013,7 @@
           Mode: row.dataset.rowMode || 'standard',
           Pos: row.querySelector('.d-pos').value,
           Stone: row.querySelector('.d-stone').value, 
+          Studded: row.querySelector('.d-studded') ? row.querySelector('.d-studded').value : 'Yes',
           Shape: row.querySelector('.d-shape').value, 
           SizeIdx: row.querySelector('.d-size') ? row.querySelector('.d-size').value : '',
           AvgWt: row.querySelector('.d-avgwt').value, 
@@ -1505,7 +1511,7 @@
       const allCadVersions = (formData._VERSIONS || []).filter(v => v.dataUrl);
       const primaryCad = allCadVersions[0];
       let stoneData = (formData._RAW_STONES || []).filter(s => s.Stone || s.Shape || s.Qty).map(s => [
-         s.Pos || '-', s.Stone || '-', s.Shape || '-',
+         s.Pos || '-', s.Stone || '-', (s.Studded === 'No' ? 'No' : 'Yes'), s.Shape || '-',
          fmtMMSize(s),
          fmtWt4(s.AvgWt || s.Sieve), s.Qty || '-', fmtWt3(s.Tot), s.Set || '-', s.Source || '-'
       ]);
@@ -1580,7 +1586,7 @@
             styles: { cellPadding: 2 },
             headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
             bodyStyles: { fontSize: 8, fontStyle: 'bold', halign: 'center', textColor: [71, 85, 105] },
-            head: [['Pos', 'Stone', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
+            head: [['Pos', 'Stone', 'Studded', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
             body: stoneData,
             margin: { bottom: 14 }
           });
@@ -1781,7 +1787,7 @@
         return dims.length ? dims.join(' x ') : '-';
       };
       let stoneData = formData._RAW_STONES.filter(s => s.Stone || s.Shape || s.Qty).map(s => [
-         s.Pos || '-', s.Stone || '-', s.Shape || '-',
+         s.Pos || '-', s.Stone || '-', (s.Studded === 'No' ? 'No' : 'Yes'), s.Shape || '-',
          fmtMMSize(s),
          fmtWt4(s.AvgWt || s.Sieve), s.Qty || '-', fmtWt3(s.Tot), s.Set || '-', s.Source || '-'
       ]);
@@ -1802,7 +1808,7 @@
             styles: { cellPadding: 1.5 },
             headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7, fontStyle: 'bold', halign: 'center' },
             bodyStyles: { fontSize: 7, fontStyle: 'bold', halign: 'center', textColor: [71, 85, 105] },
-            head: [['Pos', 'Stone', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
+            head: [['Pos', 'Stone', 'Studded', 'Shape', 'L x W x H', 'Avg Dia Wt', 'Qty', 'Total Wt', 'Setting', 'Source']],
             body: stoneData
           });
           currentY = doc.lastAutoTable.finalY + 6;
@@ -2218,6 +2224,8 @@
                 setIfNumeric('.d-tot', s.Tot, 3);
                 if(s.Set) row.querySelector('.d-set').value = s.Set;
                 if(s.Source) row.querySelector('.d-source').value = s.Source;
+                // Saved before the Studded column existed -> stays at its default, Yes.
+                if(s.Studded === 'No' || s.Studded === 'Yes') row.querySelector('.d-studded').value = s.Studded;
                 // Show the manual "Custom / Other Size" fields only when the
                 // row genuinely IS custom — a saved SizeIdx of 'custom', or a
                 // dropdown selection that could no longer be restored (its
