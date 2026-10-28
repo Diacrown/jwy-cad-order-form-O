@@ -262,8 +262,8 @@
           <div class="p-2 print-hidden bg-slate-50 flex gap-2">
             <button type="button" onclick="addDiamondRow('standard')" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-1 px-3 rounded text-xs transition-all">+ Standard Row</button>
             <button type="button" onclick="addDiamondRow('custom')" class="bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold py-1 px-3 rounded text-xs transition-all">+ Custom Row</button>
-            <button type="button" id="csvImportBtn" title="Fill the stone rows from a CAD gem report saved as CSV" class="bg-green-100 hover:bg-green-200 text-green-800 font-bold py-1 px-3 rounded text-xs transition-all">&#128229; Import CSV</button>
-            <input type="file" id="csvImportFile" accept=".csv,.txt,text/csv" class="hidden">
+            <button type="button" id="csvImportBtn" title="Fill the stone rows from a CAD gem report (.csv) or a Matrix gem report (.txt)" class="bg-green-100 hover:bg-green-200 text-green-800 font-bold py-1 px-3 rounded text-xs transition-all">&#128229; Import CSV / TXT</button>
+            <input type="file" id="csvImportFile" accept=".csv,.txt,text/csv,text/plain" class="hidden">
           </div>
         </div>
 
@@ -299,6 +299,11 @@
         <button type="button" id="submitBtn" onclick="submitForm()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-xl shadow-lg cursor-pointer transition-all text-lg">
           🚀 Download ZIP 
         </button>
+      </div>
+      <!-- Cloud copy status (filled in by saveJobToCloud; stays empty when cloud save is not set up / offline copies) -->
+      <div id="cloudSaveBar" class="print-hidden text-right pt-2" aria-live="polite">
+        <span id="cloudSaveStatus" class="text-xs text-slate-600"></span>
+        <a href="#" id="cloudSettingsLink" onclick="setCadCloudConfig(); return false;" class="text-xs text-slate-400 underline ml-2" style="display:none">Cloud save settings</a>
       </div>
     </form>
   </div>
@@ -1305,6 +1310,8 @@
         await downloadZipBundle(exactJobNumber, pdfDataUri, dataObj);
         loader.classList.add('hidden');
         submitBtn.disabled = false;
+        // Also keep a copy for the order team (background; can never affect the ZIP that was just downloaded).
+        try { queueCloudSave(dataObj); } catch (e) { console.error('Cloud save could not start:', e); }
       } catch (err) {
         alert("❌ Export failed (PDF generation or ZIP packaging).");
         console.error(err);
@@ -1312,6 +1319,165 @@
         submitBtn.disabled = false;
       }
     }
+
+
+    // ============================================================================
+    // CLOUD COPY FOR THE ORDER TEAM — every time a job is exported with "Download ZIP",
+    // the same job data (the .json that goes into the ZIP, pictures included) is also
+    // saved to the JWY Calculator's cloud storage. The order team then picks the job
+    // from the calculator's "CAD jobs" list instead of receiving the file by e-mail.
+    //
+    //  * Runs AFTER the ZIP has been delivered and in the background: if the cloud is
+    //    unreachable, not set up or the key is wrong, the ZIP is exactly as before and the
+    //    status line below the button just says the cloud copy was not saved.
+    //  * Each export is stored as a new revision of that Job No + Item No (rev 1, 2, 3...).
+    //  * Pictures are sent one per request (a request is limited to about 6 MB).
+    //  * Does nothing on offline copies (opened as a file) or until an address is configured.
+    //
+    // Set the two values below (or use "Cloud save settings", which remembers them in this browser):
+    //   endpoint: 'https://<your-calculator-site>/.netlify/functions/cad-jobs'
+    //   key:      the CAD_JOBS_WRITE_KEY set on the calculator's Netlify site
+    // ============================================================================
+    const CAD_CLOUD = { endpoint: '', key: '' };
+    const CAD_CLOUD_STORE = 'cadFormCloudConfig';
+    const CAD_CLOUD_TIMEOUT_MS = 60000;
+    const CAD_CLOUD_IMAGE_MAX_CHARS = 4300000;   // server accepts 4.8M characters per picture
+
+    function parseCloudEndpoint(raw) {
+      let t = (raw === undefined || raw === null) ? '' : String(raw).trim();
+      if (!t || /\s/.test(t)) return null;
+      if (!/^[a-z][a-z0-9+.\-]*:\/\//i.test(t)) t = 'https://' + t;
+      let u;
+      try { u = new URL(t); } catch (e) { return null; }
+      const local = (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
+      if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) return null;
+      u.search = ''; u.hash = '';
+      return u.href;
+    }
+    function getCadCloudConfig() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(CAD_CLOUD_STORE) || '{}') || {}; } catch (e) { saved = {}; }
+      const endpoint = parseCloudEndpoint(saved.endpoint) || parseCloudEndpoint(CAD_CLOUD.endpoint);
+      const key = String(saved.key || CAD_CLOUD.key || '').trim();
+      return (endpoint && key) ? { endpoint: endpoint, key: key } : null;
+    }
+    function setCadCloudConfig() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(CAD_CLOUD_STORE) || '{}') || {}; } catch (e) { saved = {}; }
+      const ep = window.prompt('Address of the calculator\'s CAD job storage (for example https://your-calculator.netlify.app/.netlify/functions/cad-jobs).\nLeave empty to switch cloud save off in this browser.', saved.endpoint || CAD_CLOUD.endpoint || '');
+      if (ep === null) return;
+      if (String(ep).trim() === '') { try { localStorage.removeItem(CAD_CLOUD_STORE); } catch (e) {} setCloudStatus('', ''); return; }
+      const okEp = parseCloudEndpoint(ep);
+      if (!okEp) { alert('That does not look like a valid https:// address, so nothing was saved.'); return; }
+      const key = window.prompt('Cloud save key (ask the person who set up the calculator):', saved.key || '');
+      if (key === null) return;
+      try { localStorage.setItem(CAD_CLOUD_STORE, JSON.stringify({ endpoint: okEp, key: String(key).trim() })); } catch (e) { alert('This browser blocked saving the settings.'); }
+      setCloudStatus('Cloud save is set up. It will run after your next Download ZIP.', '');
+    }
+    function setCloudStatus(text, kind) {
+      const el = document.getElementById('cloudSaveStatus');
+      if (!el) return;
+      el.textContent = text || '';
+      el.className = 'text-xs ' + (kind === 'ok' ? 'text-green-700 font-semibold' : kind === 'warn' ? 'text-amber-700 font-semibold' : 'text-slate-600');
+    }
+
+    // Keeps one picture under the server's per-request limit without touching ordinary pictures:
+    // small enough -> sent untouched; otherwise re-encoded as high-quality JPEG (and scaled down only if still too big).
+    function fitPictureForCloud(dataUrl) {
+      return new Promise(function (resolve) {
+        if (!dataUrl || typeof dataUrl !== 'string' || dataUrl.indexOf('data:image') !== 0) { resolve(null); return; }
+        const okType = /^data:image\/(png|jpe?g|webp);base64,/i.test(dataUrl);
+        if (okType && dataUrl.length <= CAD_CLOUD_IMAGE_MAX_CHARS) { resolve(dataUrl); return; }
+        const img = new Image();
+        img.onload = function () {
+          try {
+            let w = img.width, h = img.height, out = null;
+            for (let i = 0; i < 6; i++) {
+              const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h));
+              const x = c.getContext('2d'); x.fillStyle = '#ffffff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+              out = c.toDataURL('image/jpeg', 0.9);
+              if (out.length <= CAD_CLOUD_IMAGE_MAX_CHARS) break;
+              w *= 0.8; h *= 0.8; out = null;
+            }
+            resolve(out);
+          } catch (e) { resolve(null); }
+        };
+        img.onerror = function () { resolve(null); };
+        img.src = dataUrl;
+      });
+    }
+
+    async function cloudPost(cfg, action, body) {
+      const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, CAD_CLOUD_TIMEOUT_MS);
+      try {
+        const res = await fetch(cfg.endpoint + '?action=' + encodeURIComponent(action), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cad-key': cfg.key },
+          body: JSON.stringify(body),
+          signal: ctrl ? ctrl.signal : undefined
+        });
+        let out = null;
+        try { out = await res.json(); } catch (e) { out = null; }
+        if (!res.ok || !out || !out.ok) throw new Error((out && out.error) || ('HTTP ' + res.status));
+        return out;
+      } finally { clearTimeout(timer); }
+    }
+
+    // Returns { id, rev, failedImages } or throws.
+    async function saveJobToCloud(dataObj, cfg, onProgress) {
+      // Job data without the picture bytes; each picture entry is flagged so the calculator knows to fetch it.
+      const job = JSON.parse(JSON.stringify(dataObj, function (k, v) { return k === 'dataUrl' ? undefined : v; }));
+      const lists = [['_VERSIONS', 'v'], ['_CLIENT_REF_IMAGES', 'r']];
+      lists.forEach(function (pair) {
+        (dataObj[pair[0]] || []).forEach(function (it, i) { if (job[pair[0]] && job[pair[0]][i]) job[pair[0]][i]._hasImage = !!(it && it.dataUrl); });
+      });
+      const saved = await cloudPost(cfg, 'save', { job: job });
+      let failed = 0;
+      for (let n = 0; n < saved.slots.length; n++) {
+        const slot = saved.slots[n];
+        const src = (dataObj[slot.charAt(0) === 'v' ? '_VERSIONS' : '_CLIENT_REF_IMAGES'] || [])[parseInt(slot.slice(1), 10)];
+        if (onProgress) onProgress(n + 1, saved.slots.length);
+        const fitted = await fitPictureForCloud(src && src.dataUrl);
+        let done = false;
+        if (fitted) {
+          for (let attempt = 0; attempt < 2 && !done; attempt++) {
+            try { await cloudPost(cfg, 'image', { id: saved.id, slot: slot, dataUrl: fitted }); done = true; } catch (e) { console.error('Cloud picture ' + slot + ' failed:', e); }
+          }
+        }
+        if (!done) failed++;
+      }
+      return { id: saved.id, rev: saved.rev, failedImages: failed };
+    }
+
+    let cloudSaveChain = Promise.resolve();
+    function queueCloudSave(dataObj) {
+      const link = document.getElementById('cloudSettingsLink');
+      if (!/^https?:$/.test(window.location.protocol)) return;       // offline copy: no cloud
+      const cfg = getCadCloudConfig();
+      if (!cfg) { if (link) link.style.display = ''; return; }       // not set up: stay silent, offer the settings link
+      if (link) link.style.display = 'none';
+      const label = [dataObj['JobNo'], dataObj['ItemNo']].map(function (v) { return (v || '').toString().trim(); }).filter(Boolean).join(' / ') || 'this job';
+      cloudSaveChain = cloudSaveChain.then(async function () {
+        setCloudStatus('Saving a copy of ' + label + ' for the order team...', '');
+        try {
+          const r = await saveJobToCloud(dataObj, cfg, function (n, total) { setCloudStatus('Saving a copy of ' + label + ' for the order team (picture ' + n + ' of ' + total + ')...', ''); });
+          if (r.failedImages) setCloudStatus('Saved ' + label + ' (revision ' + r.rev + ') for the order team, but ' + r.failedImages + ' picture(s) did not upload. Please also send them the ZIP.', 'warn');
+          else setCloudStatus('Saved ' + label + ' for the order team (revision ' + r.rev + '). No need to e-mail the file.', 'ok');
+        } catch (err) {
+          console.error('Cloud save failed:', err);
+          setCloudStatus('Could not save the cloud copy (' + ((err && err.message) || 'unknown problem') + '). Your ZIP was downloaded normally: please send it to the order team as before.', 'warn');
+        }
+      });
+    }
+    // Show the small settings link when cloud save is not configured on this (online) page.
+    (function showCloudSettingsLinkIfNeeded() {
+      try {
+        if (/^https?:$/.test(window.location.protocol) && !getCadCloudConfig()) {
+          const link = document.getElementById('cloudSettingsLink'); if (link) link.style.display = '';
+        }
+      } catch (e) { /* leave hidden */ }
+    })();
 
     // ============================================================================
     // PO PDF — a leaner variant for Purchase Order purposes. No header
@@ -2073,7 +2239,7 @@
     }
 
     // ============================================================================
-    // CSV STONE IMPORT  (additive and self-contained)
+    // CSV / MATRIX TXT STONE IMPORT  (additive and self-contained)
     //
     // Lets a designer fill the Gemstone table from a CAD gem report exported as
     // CSV (e.g. columns: Material, Shape-Cut, W x L x D, Count, Carats per unit,
@@ -2254,6 +2420,80 @@
         return { recs: recs, skipped: skipped };
       }
 
+      // ---------- Matrix gem report (.txt) ----------
+      // Older Matrix software exports one line per stone group, e.g.
+      //   18 , Diamond , Round , Diamond , X=1.50 , Y=1.50 , Z=.93 , .01ct. (total .23ct.)
+      // i.e. count, material, shape, gem, X/Y/Z in mm, per-stone weight, total weight.
+      // The weights in that report are rounded to 0.01 ct (a 0.9 mm round shows as ".00ct"),
+      // so where the size is in our catalog the catalog weight is used; the report's weight
+      // (total / count) is only used for sizes that are not in the catalog.
+      function looksLikeMatrixTxt(text) {
+        return /(^|\n)[ \t]*\d+[ \t]*,[^\n]*\bX[ \t]*=[ \t]*\d*\.?\d+[^\n]*\bY[ \t]*=[ \t]*\d*\.?\d+/i.test(text);
+      }
+
+      function classifyRecord(rec) {
+        if (rec.mode !== 'standard') return rec;
+        rec.matchIdx = findCatalogIdx(rec.shape, rec.dims);
+        if (rec.matchIdx >= 0) {
+          const e = shapeSizeData[rec.shape][rec.matchIdx];
+          rec.catalogLabel = e.size.split('(')[0].trim();
+          rec.catalogWt = (e.wt !== null && e.wt !== undefined) ? e.wt : null;
+          if (rec.catalogWt !== null) rec.avgWt = null;   // catalog weight wins over the rounded report weight
+        } else {
+          rec.mode = 'custom';
+          rec.customReason = (shapeSizeData[rec.shape] || []).length ? 'size' : 'nocatalog';
+        }
+        return rec;
+      }
+
+      function buildRecordsFromMatrixTxt(text) {
+        const lines = text.split(/\r?\n/);
+        const recs = [], skipped = [];
+        let declaredTotal = null;
+        lines.forEach((line, i) => {
+          const t = line.trim();
+          if (!t) return;
+          const tot = /Total\s+Gems\s*:\s*(\d+)/i.exec(t);
+          if (tot) { declaredTotal = parseInt(tot[1], 10); return; }
+          const parts = t.split(',').map((x) => x.trim());
+          const qty = /^\d+$/.test(parts[0]) ? parseInt(parts[0], 10) : null;
+          const axis = (name) => {
+            const re = new RegExp('^' + name + '\\s*=\\s*(\\d*\\.?\\d+)', 'i');
+            for (let k = 0; k < parts.length; k++) { const m = re.exec(parts[k]); if (m) return parseFloat(m[1]); }
+            return null;
+          };
+          const X = axis('X'), Y = axis('Y'), Z = axis('Z');
+          if (!qty || X === null) { if (!/^Total/i.test(t)) skipped.push(i + 1); return; }
+
+          const m = mapShapeCell(parts[2] || '');
+          let stone = '';
+          const gkey = norm(parts[3] || parts[1] || '');
+          if (gkey) dropdownData.stoneTypes.forEach((st) => { if (norm(st) === gkey) stone = st; });
+
+          let a = X, b = (Y === null ? X : Y);
+          if (b > a) { const tmp = a; a = b; b = tmp; }          // longer side first, like the form's catalog
+          const dims = [a, b]; if (Z !== null) dims.push(Z);
+
+          const totM = /total\s*(\d*\.?\d+)\s*ct/i.exec(t);
+          const perM = /,\s*(\d*\.?\d+)\s*ct\.?\s*(?:\(|$)/i.exec(t);
+          const total = totM ? parseFloat(totM[1]) : null;
+          const per = perM ? parseFloat(perM[1]) : null;
+          let avg = (total > 0) ? total / qty : ((per > 0) ? per : null);
+
+          const rec = {
+            sourceRow: i + 1, rawShape: parts[2] || '', shape: m.shape, shapeText: m.shapeText, stone: stone,
+            dims: dims, qty: qty, avgWt: avg > 0 ? avg : null, wtRounded: true,
+            mode: m.shape ? 'standard' : 'custom', matchIdx: -1, catalogLabel: '', catalogWt: null,
+          };
+          recs.push(classifyRecord(rec));
+        });
+        const sum = recs.reduce((acc, r) => acc + (r.qty || 0), 0);
+        const notes = [];
+        if (declaredTotal !== null && declaredTotal !== sum) notes.push('The report says ' + declaredTotal + ' gems but ' + sum + ' were read from its lines: please check the file.');
+        if (skipped.length) notes.push(skipped.length + ' line(s) were not understood and were skipped (line ' + skipped.slice(0, 5).join(', ') + (skipped.length > 5 ? ', ...' : '') + ').');
+        return { recs: recs, skipped: skipped, format: 'txt', notes: notes };
+      }
+
       // ---------- writing rows into the form (uses the form's own functions) ----------
       function setSel(el, val) { if (!el || !val) return; el.value = val; }
 
@@ -2330,7 +2570,7 @@
         const wt = rec.avgWt || rec.catalogWt;
         let status, cls;
         if (rec.mode === 'custom' && !rec.shape) { status = 'Shape "' + rec.shapeText + '" not in the list: added as a Custom row, please choose the shape'; cls = 'text-red-700'; }
-        else if (rec.mode === 'custom') { status = 'Not in size catalog: added as a Custom row' + (wt ? '' : ', enter weight'); cls = 'text-amber-700'; }
+        else if (rec.mode === 'custom') { status = 'Not in size catalog: added as a Custom row' + (wt ? (rec.wtRounded ? ' (weight from report, rounded: please verify)' : '') : ', enter weight'); cls = 'text-amber-700'; }
         else { status = 'Catalog size: ' + rec.catalogLabel + (wt ? '' : ' (no catalog weight, enter weight)'); cls = 'text-green-700'; }
         return { dimsTxt: dimsTxt, wt: wt, status: status, cls: cls };
       }
@@ -2362,9 +2602,10 @@
         ov.innerHTML =
           '<div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col">' +
             '<div class="px-4 py-3 border-b border-slate-200 flex items-start justify-between gap-3">' +
-              '<div><div class="font-extrabold text-slate-900">Import stones from CSV</div>' +
+              '<div><div class="font-extrabold text-slate-900">Import stones from ' + (result.format === 'txt' ? 'Matrix report' : 'CSV') + '</div>' +
               '<div class="text-xs text-slate-500">' + esc(fileName) + ': ' + recs.length + ' stone rows, ' + totalQty + ' pcs. ' +
-              nCat + ' matched the size catalog' + (nNeedWt ? ', ' + nNeedWt + ' need a weight entered after import' : '') + '.</div></div>' +
+              nCat + ' matched the size catalog' + (nNeedWt ? ', ' + nNeedWt + ' need a weight entered after import' : '') + '.' +
+              (result.notes && result.notes.length ? '<div class="text-amber-700 font-semibold mt-1">' + esc(result.notes.join(' ')) + '</div>' : '') + '</div></div>' +
               '<button type="button" id="csvImportClose" class="text-slate-500 hover:text-red-600 text-2xl leading-none">&times;</button>' +
             '</div>' +
             '<div class="px-4 py-3 overflow-y-auto text-sm">' +
@@ -2381,7 +2622,8 @@
                   '<th class="px-2 py-1 text-right">Qty</th><th class="px-2 py-1 text-right">Avg wt (ct)</th><th class="px-2 py-1 text-left">Result</th>' +
                 '</tr></thead><tbody>' + rowsHtml + '</tbody></table>' +
               '</div>' +
-              '<div class="text-xs text-slate-500 mt-2">Sizes found in the catalog go to Standard rows; any other size goes to a Custom row. Existing rows that already have data are not changed; empty rows are filled first, then new rows are added. The Material column is not used.</div>' +
+              '<div class="text-xs text-slate-500 mt-2">Sizes found in the catalog go to Standard rows; any other size goes to a Custom row. Existing rows that already have data are not changed; empty rows are filled first, then new rows are added. ' +
+              (result.format === 'txt' ? 'Weights in a Matrix report are rounded to 0.01 ct, so catalog weights are used wherever the size matches.' : 'The Material column is not used.') + '</div>' +
             '</div>' +
             '<div class="px-4 py-3 border-t border-slate-200 flex justify-end gap-2">' +
               '<button type="button" id="csvImportCancel" class="px-4 py-2 rounded border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50">Cancel</button>' +
@@ -2411,24 +2653,42 @@
       }
 
       // ---------- wiring ----------
+      function handleText(file, rawText) {
+        try {
+          const text = String(rawText || '').replace(/^﻿/, '');
+          let result;
+          if (looksLikeMatrixTxt(text)) {
+            result = buildRecordsFromMatrixTxt(text);          // Matrix gem report (.txt)
+          } else {
+            const table = parseCsv(text, detectDelimiter(text)); // CSV gem report
+            if (table.length < 2) throw new Error('The file has no data rows.');
+            result = buildRecords(table);
+          }
+          if (!result.recs.length) throw new Error('No stone rows were found in this file.');
+          showPreview(file.name, result);
+        } catch (err) {
+          console.error('Stone import read failed:', err);
+          alert('Could not read this file: ' + err.message);
+        }
+        fileInput.value = '';
+      }
+
       btn.addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', (ev) => {
         const file = ev.target.files && ev.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
-          try {
-            let text = String(reader.result || '').replace(/^﻿/, '');
-            const table = parseCsv(text, detectDelimiter(text));
-            if (table.length < 2) throw new Error('The file has no data rows.');
-            const result = buildRecords(table);
-            if (!result.recs.length) throw new Error('No stone rows were found in this file.');
-            showPreview(file.name, result);
-          } catch (err) {
-            console.error('CSV read failed:', err);
-            alert('Could not read this CSV: ' + err.message);
+          const text = String(reader.result || '');
+          if (text.indexOf('\u0000') !== -1) {
+            // some older Windows programs save text files as UTF-16: read it again as such
+            const again = new FileReader();
+            again.onload = () => handleText(file, again.result);
+            again.onerror = () => { alert('Could not read that file.'); fileInput.value = ''; };
+            again.readAsText(file, 'utf-16le');
+            return;
           }
-          fileInput.value = '';
+          handleText(file, text);
         };
         reader.onerror = () => { alert('Could not read that file.'); fileInput.value = ''; };
         reader.readAsText(file);
